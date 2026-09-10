@@ -3,79 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Gestão de Viagens</title>
+    <title>Gestão de Viagens | NOC & Suporte</title>
     
     <link rel="icon" type="image/png" href="logo.png">
     
-    <!-- CDNs Solicitados (Tailwind e Bootstrap/Themes) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.2/dist/flatly/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- CSS Customizado -->
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-slate-100 min-h-screen font-sans">
+<body class="bg-slate-100 min-h-screen font-sans text-slate-800">
 
     <!-- ========================================== -->
-    <!-- MÓDULO 1: AUTENTICAÇÃO (LOGIN / CADASTRO)  -->
+    <!-- MÓDULO 1: AUTENTICAÇÃO                     -->
     <!-- ========================================== -->
-    <div id="authView" class="flex items-center justify-center min-h-screen">
-        <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md" id="mainCard">
+    <div id="authView" class="flex items-center justify-center min-h-screen bg-slate-900 bg-opacity-95 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border-t-4 border-blue-600" id="mainCard">
             
             <div class="flex justify-center mb-6">
-                <img src="logo.png" alt="Logo" class="h-20 object-contain" onerror="this.src='https://via.placeholder.com/150?text=Logo'">
+                <img src="logo.png" alt="Logo" class="h-20 object-contain drop-shadow-md" onerror="this.src='https://via.placeholder.com/150?text=Logo'">
             </div>
 
             <!-- LOGIN -->
             <div id="loginSection">
-                <h2 class="text-2xl font-bold text-slate-700 text-center mb-6">Acesso ao Sistema</h2>
+                <h2 class="text-xl font-bold text-slate-800 text-center mb-6 uppercase tracking-wider"><i class="fa-solid fa-lock text-slate-400 mr-2"></i> Autenticação</h2>
                 <form id="loginForm" class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-600">Usuário (nome.sobrenome)</label>
-                        <input type="text" id="loginUser" required placeholder="ex: joao.silva" class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 lowercase">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Usuário</label>
+                        <div class="relative mt-1">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-user"></i></span>
+                            <input type="text" id="loginUser" required placeholder="nome.sobrenome" class="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 lowercase bg-slate-50 transition">
+                        </div>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-600">Senha</label>
-                        <input type="password" id="loginSenha" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Senha</label>
+                        <div class="relative mt-1">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-key"></i></span>
+                            <input type="password" id="loginSenha" required class="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 transition">
+                        </div>
                     </div>
-                    <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
-                        <span id="loginText">Entrar</span>
+                    <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/30 text-white font-bold py-2.5 px-4 rounded-lg transition-all duration-200 mt-4">
+                        <span id="loginText">Acessar Sistema <i class="fa-solid fa-arrow-right-to-bracket ml-2"></i></span>
                     </button>
-                    <div id="loginMsg" class="text-center text-sm font-medium mt-2 hidden"></div>
+                    <div id="loginMsg" class="text-center text-sm font-medium mt-3 hidden"></div>
                 </form>
-                <div class="mt-6 text-center">
-                    <p class="text-sm text-slate-600">Primeiro acesso?</p>
-                    <button type="button" onclick="toggleAuthView('register')" class="text-blue-600 hover:underline font-semibold mt-1">Crie sua conta aqui</button>
+                <div class="mt-6 pt-4 border-t border-slate-100 text-center">
+                    <button type="button" onclick="toggleAuthView('register')" class="text-slate-500 hover:text-blue-600 font-semibold text-sm transition"><i class="fa-solid fa-user-plus mr-1"></i> Solicitar Acesso (1º Login)</button>
                 </div>
             </div>
 
             <!-- CADASTRO -->
             <div id="registerSection" class="hidden">
-                <h2 class="text-2xl font-bold text-slate-700 text-center mb-6">Primeiro Acesso</h2>
-                <form id="registerForm" class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
+                <h2 class="text-xl font-bold text-slate-800 text-center mb-6 uppercase tracking-wider"><i class="fa-solid fa-id-card text-slate-400 mr-2"></i> Novo Registro</h2>
+                <form id="registerForm" class="space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="block text-sm font-medium text-slate-600">Nome</label>
-                            <input type="text" id="regNome" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-semibold text-slate-500">NOME</label>
+                            <input type="text" id="regNome" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-slate-600">Sobrenome</label>
-                            <input type="text" id="regSobrenome" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-semibold text-slate-500">SOBRENOME</label>
+                            <input type="text" id="regSobrenome" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
                         </div>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-600">Equipe</label>
-                        <select id="regEquipe" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-xs font-semibold text-slate-500">EQUIPE</label>
+                        <select id="regEquipe" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
                             <option value="">Selecione...</option>
-                            <option value="Anna">Equipe da Anna</option>
-                            <option value="Didi">Equipe do Didi</option>
+                            <option value="Anna">NOC/Equipe Anna</option>
+                            <option value="Didi">Suporte/Equipe Didi</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-600">Nível de Suporte</label>
-                        <select id="regNivel" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-xs font-semibold text-slate-500">NÍVEL DE ATUAÇÃO</label>
+                        <select id="regNivel" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
                             <option value="">Selecione...</option>
                             <option value="Suporte NN">Suporte NN</option>
                             <option value="Suporte N1">Suporte N1</option>
@@ -84,125 +89,169 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-600">Crie uma Senha</label>
-                        <input type="password" id="regSenha" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-xs font-semibold text-slate-500">SENHA DE ACESSO</label>
+                        <input type="password" id="regSenha" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
                     </div>
-                    <button type="submit" id="btnRegister" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg transition duration-200 mt-2">
-                        <span id="regText">Cadastrar</span>
+                    <button type="submit" id="btnRegister" class="w-full bg-slate-800 hover:bg-slate-900 shadow-lg text-white font-bold py-2 px-4 rounded transition-all duration-200 mt-4">
+                        <span id="regText"><i class="fa-solid fa-save mr-2"></i> Criar Credencial</span>
                     </button>
-                    <div id="regMsg" class="text-center text-sm font-medium mt-2 hidden"></div>
+                    <div id="regMsg" class="text-center text-sm font-medium mt-3 hidden"></div>
                 </form>
-                <div class="mt-6 text-center">
-                    <button type="button" onclick="toggleAuthView('login')" class="text-slate-500 hover:text-slate-700 font-semibold text-sm">Voltar para o Login</button>
+                <div class="mt-4 pt-4 border-t border-slate-100 text-center">
+                    <button type="button" onclick="toggleAuthView('login')" class="text-slate-500 hover:text-slate-800 font-semibold text-sm transition"><i class="fa-solid fa-arrow-left mr-1"></i> Voltar</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- ========================================== -->
-    <!-- MÓDULO 2: DASHBOARD (SUBPÁGINA OCULTA)     -->
+    <!-- MÓDULO 2: DASHBOARD PROFISSIONAL           -->
     <!-- ========================================== -->
     <div id="dashboardView" class="hidden">
-        <nav class="bg-slate-800 text-white p-4 shadow-md flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <img src="logo.png" alt="Logo" class="h-8 bg-white rounded p-1" onerror="this.src='https://via.placeholder.com/150?text=Logo'">
-                <h1 class="text-xl font-bold">Painel de Viagens</h1>
-            </div>
-            <div class="flex items-center gap-4">
-                <span id="userGreeting" class="text-sm font-medium"></span>
-                <button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm font-bold transition">Sair</button>
-            </div>
-        </nav>
-
-        <main class="container mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Formulário de Registro -->
-            <section class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md h-fit">
-                <h2 class="text-lg font-bold text-slate-700 border-b pb-2 mb-4">Registrar Horas</h2>
-                <form id="tripForm" class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600">Sigla da Loja (XXX)</label>
-                            <input type="text" id="sigla" required maxlength="3" class="w-full uppercase px-3 py-2 border rounded focus:ring-blue-500 focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600">Tipo de Viagem</label>
-                            <select id="tipoProjeto" required class="w-full px-3 py-2 border rounded focus:ring-blue-500 focus:border-blue-500">
-                                <option value="Projeto">Projeto</option>
-                                <option value="Suporte">Suporte</option>
-                                <option value="Outros">Outros</option>
-                            </select>
-                        </div>
+        <!-- Top Navbar estilo CoreUI -->
+        <header class="bg-slate-900 border-b border-slate-700 sticky top-0 z-50">
+            <div class="container mx-auto px-4 h-16 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <img src="logo.png" alt="Logo" class="h-10 bg-white rounded-md p-1 shadow">
+                    <div class="hidden sm:block">
+                        <h1 class="text-white font-bold tracking-wide">Workspace Viagens</h1>
+                        <span class="text-slate-400 text-xs">Módulo de Controle Operacional</span>
                     </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-600">Data do Trabalho</label>
-                        <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 border rounded focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <div class="text-right hidden md:block">
+                        <p class="text-sm font-medium text-white" id="navUserName">Janaelson Silva</p>
+                        <p class="text-xs text-slate-400" id="navUserRole">Equipe Didi • N1</p>
                     </div>
-                    <div class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded border">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600">Entrada</label>
-                            <input type="time" id="hrEntrada" required class="w-full px-2 py-1 border rounded">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600">Início Almoço</label>
-                            <input type="time" id="hrInicioAlmoco" required class="w-full px-2 py-1 border rounded">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600">Fim Almoço</label>
-                            <input type="time" id="hrFimAlmoco" required class="w-full px-2 py-1 border rounded">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600">Saída</label>
-                            <input type="time" id="hrSaida" required class="w-full px-2 py-1 border rounded">
-                        </div>
+                    <div class="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold border-2 border-slate-700">
+                        <i class="fa-solid fa-user-astronaut"></i>
                     </div>
-                    <button type="submit" id="btnSalvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded transition">
-                        <span id="btnSalvarTexto">Salvar Registro</span>
+                    <div class="h-6 w-px bg-slate-700 mx-1"></div>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition flex items-center gap-2 text-sm font-semibold">
+                        <i class="fa-solid fa-power-off"></i> <span class="hidden sm:inline">Encerrar</span>
                     </button>
-                    <div id="msgSalvar" class="text-center text-sm font-medium hidden"></div>
-                </form>
+                </div>
+            </div>
+        </header>
+
+        <main class="container mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
+            
+            <!-- Painel Esquerdo: Entrada de Dados -->
+            <section class="xl:col-span-4 space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-clock-rotate-left text-blue-500 mr-2"></i> Lançar Apontamento</h2>
+                    </div>
+                    
+                    <form id="tripForm" class="p-5 space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">CÓD. LOJA</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400"><i class="fa-solid fa-store"></i></span>
+                                    <input type="text" id="sigla" required maxlength="3" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 uppercase bg-slate-50">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">CATEGORIA</label>
+                                <select id="tipoProjeto" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-slate-50">
+                                    <option value="Projeto">Projeto</option>
+                                    <option value="Suporte">Suporte N1/N2</option>
+                                    <option value="Infraestrutura">Infraestrutura</option>
+                                    <option value="Outros">Outros</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">DATA DA OPERAÇÃO</label>
+                            <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-slate-50">
+                        </div>
+
+                        <div class="bg-slate-100 p-4 rounded-lg border border-slate-200 space-y-4">
+                            <h3 class="text-xs font-bold text-slate-600 uppercase border-b border-slate-200 pb-2"><i class="fa-regular fa-clock mr-1"></i> Cronograma do Dia</h3>
+                            
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500">START (ENTRADA)</label>
+                                    <input type="time" id="hrEntrada" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 text-orange-600">INÍCIO PAUSA</label>
+                                    <input type="time" id="hrInicioAlmoco" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500 text-orange-600">FIM PAUSA</label>
+                                    <input type="time" id="hrFimAlmoco" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-500">STOP (SAÍDA)</label>
+                                    <input type="time" id="hrSaida" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" id="btnSalvar" class="w-full bg-blue-600 hover:bg-blue-700 shadow-md text-white font-bold py-2.5 rounded transition">
+                            <span id="btnSalvarTexto"><i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar no Banco</span>
+                        </button>
+                        <div id="msgSalvar" class="text-center text-sm font-medium hidden"></div>
+                    </form>
+                </div>
             </section>
 
-            <!-- Relatórios -->
-            <section class="lg:col-span-2 space-y-6">
-                <div class="bg-white p-6 rounded-xl shadow-md overflow-x-auto">
-                    <h2 class="text-lg font-bold text-slate-700 border-b pb-2 mb-4">Relatório 1: Horas e Extras</h2>
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-100 text-slate-600">
-                            <tr>
-                                <th class="p-2 border">Data</th>
-                                <th class="p-2 border">Loja</th>
-                                <th class="p-2 border">Escala Aplicada</th>
-                                <th class="p-2 border text-center">Horas Feitas</th>
-                                <th class="p-2 border text-center text-blue-600">Horas Extras</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbHoras" class="text-slate-700">
-                            <tr><td colspan="5" class="p-4 text-center">Aguardando login...</td></tr>
-                        </tbody>
-                    </table>
+            <!-- Painel Direito: Datatables -->
+            <section class="xl:col-span-8 space-y-6">
+                
+                <!-- Tabela 1 -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[350px]">
+                    <div class="bg-slate-50 px-5 py-4 border-b border-slate-200">
+                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-list-check text-slate-500 mr-2"></i> Log de Horas (Escalas & Extras)</h2>
+                    </div>
+                    <div class="overflow-auto custom-scrollbar flex-1 p-0">
+                        <table class="min-w-full divide-y divide-slate-200 text-sm text-left">
+                            <thead class="bg-slate-100 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Data</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Site</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Regra de Escala</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Trabalhado</th>
+                                    <th class="px-4 py-3 font-bold text-blue-600 uppercase text-[10px] tracking-wider text-center">Balanço Extra</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbHoras" class="bg-white divide-y divide-slate-100">
+                                <tr><td colspan="5" class="p-6 text-center text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 block"></i> Conectando à base...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-xl shadow-md overflow-x-auto">
-                    <h2 class="text-lg font-bold text-slate-700 border-b pb-2 mb-4">Relatório 2: Financeiro de Viagens</h2>
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-800 text-white">
-                            <tr>
-                                <th class="p-2 border">Data</th>
-                                <th class="p-2 border">Loja</th>
-                                <th class="p-2 border text-center">Extras (h)</th>
-                                <th class="p-2 border text-right">Valor/Hora (R$)</th>
-                                <th class="p-2 border text-right text-green-400">Total Previsto (R$)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbFinanceiro" class="text-slate-700">
-                        </tbody>
-                    </table>
+                <!-- Tabela 2 -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[350px]">
+                    <div class="bg-slate-800 px-5 py-4 border-b border-slate-900">
+                        <h2 class="text-sm font-bold text-white uppercase"><i class="fa-solid fa-wallet text-emerald-400 mr-2"></i> Previsão Financeira</h2>
+                    </div>
+                    <div class="overflow-auto custom-scrollbar flex-1 p-0">
+                        <table class="min-w-full divide-y divide-slate-200 text-sm text-left">
+                            <thead class="bg-slate-50 sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Data</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Site</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">H.E (Qtd)</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Taxa (R$/h)</th>
+                                    <th class="px-4 py-3 font-bold text-emerald-600 uppercase text-[10px] tracking-wider text-right">Provisão Diária</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbFinanceiro" class="bg-white divide-y divide-slate-100">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
+
             </section>
         </main>
     </div>
 
-    <!-- Script Customizado -->
     <script src="script.js"></script>
 </body>
 </html>
