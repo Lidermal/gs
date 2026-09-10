@@ -9,11 +9,8 @@ window.onload = () => {
     userData = JSON.parse(localStorage.getItem('usuarioAtivo'));
     if (userData) { 
         document.getElementById('globalHeader').classList.remove('hidden');
-        showView('projectsView'); 
-        initApp(); 
-    } else { 
-        showView('authView'); 
-    }
+        showView('projectsView'); initApp(); 
+    } else { showView('authView'); }
 };
 
 function showView(viewId) {
@@ -47,12 +44,9 @@ async function fetchAPI(data, btnId, textId, msgId, originalText) {
     } catch (error) { 
         if(msgDiv) { msgDiv.classList.remove('hidden'); msgDiv.className = "text-center text-sm font-semibold mt-3 text-red-500"; msgDiv.innerHTML = `<i class="fa-solid fa-wifi mr-1"></i> Erro de conexão.`; }
         return false;
-    } finally { 
-        if(btn) { btn.disabled = false; btn.classList.remove('opacity-75', 'cursor-not-allowed'); textSpan.innerHTML = originalText; }
-    }
+    } finally { if(btn) { btn.disabled = false; btn.classList.remove('opacity-75', 'cursor-not-allowed'); textSpan.innerHTML = originalText; } }
 }
 
-// LOGIN & REGISTER
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = { action: 'register', nome: document.getElementById('regNome').value, sobrenome: document.getElementById('regSobrenome').value, equipe: document.getElementById('regEquipe').value, nivel: document.getElementById('regNivel').value, senha: document.getElementById('regSenha').value };
@@ -76,18 +70,12 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }
 });
 
-function logout() { 
-    localStorage.removeItem('usuarioAtivo'); userData = null; 
-    document.getElementById('globalHeader').classList.add('hidden');
-    showView('authView'); 
-}
+function logout() { localStorage.removeItem('usuarioAtivo'); userData = null; document.getElementById('globalHeader').classList.add('hidden'); showView('authView'); }
 
-// INICIALIZAÇÃO E LISTAGEM DE PROJETOS
 function initApp() {
     document.getElementById('navUserName').textContent = `${userData.nome} ${userData.sobrenome}`;
     document.getElementById('navUserRole').textContent = `Equipe ${userData.equipe} • ${userData.nivel}`;
-    carregarTudo();
-    carregarColegas();
+    carregarTudo(); carregarColegas();
 }
 
 async function carregarTudo() {
@@ -95,8 +83,7 @@ async function carregarTudo() {
     try {
         const r = await fetchAPI({ action: 'getTrips', login: userData.login });
         if (r && r.success) {
-            allTrips = r.trips;
-            renderizarProjetos();
+            allTrips = r.trips; renderizarProjetos();
             if(currentProject.sigla !== '') renderizarWorkspace();
         }
     } catch(e){}
@@ -108,8 +95,6 @@ function renderizarProjetos() {
         grid.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 bg-white rounded border border-dashed border-slate-300"><i class="fa-solid fa-folder-open text-4xl mb-3"></i><br>Nenhum projeto ativo.<br>Clique em "Novo Projeto" para começar.</div>';
         return;
     }
-
-    // Agrupa viagens únicas pela Sigla e Tipo
     const projetosUnicos = {};
     allTrips.forEach(t => {
         const key = t.sigla + '|' + t.tipo;
@@ -122,19 +107,15 @@ function renderizarProjetos() {
         grid.innerHTML += `
             <div onclick="abrirWorkspace('${p.sigla}', '${p.tipo}')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 cursor-pointer transition group">
                 <div class="flex justify-between items-start mb-4">
-                    <div class="bg-blue-50 text-blue-600 w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg group-hover:bg-blue-600 group-hover:text-white transition">
-                        <i class="fa-solid fa-store"></i>
-                    </div>
+                    <div class="bg-blue-50 text-blue-600 w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg group-hover:bg-blue-600 group-hover:text-white transition"><i class="fa-solid fa-store"></i></div>
                     <span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded">${p.registros} reg.</span>
                 </div>
                 <h3 class="text-xl font-bold text-slate-800 uppercase tracking-tight">${p.sigla}</h3>
                 <p class="text-xs text-slate-500 mt-1 font-medium truncate">${p.tipo}</p>
-            </div>
-        `;
+            </div>`;
     });
 }
 
-// WORKSPACE (DENTRO DE UM PROJETO)
 function checkOutros() {
     const v = document.getElementById('novoProjTipo').value;
     if(v === 'Outros') document.getElementById('novoProjOutros').classList.remove('hidden');
@@ -149,65 +130,56 @@ function criarProjeto() {
     let tipo = document.getElementById('novoProjTipo').value;
     if (tipo === 'Outros') tipo = document.getElementById('novoProjOutros').value.trim();
     if(!sigla) return alert("Informe a sigla da loja!");
-    
-    fecharModalProjeto();
-    abrirWorkspace(sigla, tipo);
+    fecharModalProjeto(); abrirWorkspace(sigla, tipo);
 }
 
 function abrirWorkspace(sigla, tipo) {
     currentProject = { sigla: sigla, tipo: tipo };
     document.getElementById('workspaceTitle').textContent = `PROJETO: ${sigla}`;
     document.getElementById('workspaceSubtitle').textContent = `Categoria: ${tipo}`;
-    showView('dashboardView');
-    cancelarEdicao(); // Limpa o form
-    renderizarWorkspace();
+    showView('dashboardView'); cancelarEdicao(); renderizarWorkspace();
 }
 
-function voltarParaProjetos() {
-    currentProject = { sigla: '', tipo: '' };
-    showView('projectsView');
-}
+function voltarParaProjetos() { currentProject = { sigla: '', tipo: '' }; showView('projectsView'); }
 
-// LOGICA DE ESCALAS (Base Agosto 2026, Dia 21)
+// LÓGICA DE TURNOS (Baseada em Setembro de 2026 - Onde Didi é "Turno Estendido")
 function determinarEscala(equipe, dataViagemStr) {
     const d = new Date(dataViagemStr + "T00:00:00");
-    let diff = (d.getFullYear() - 2026) * 12 + (d.getMonth() - 8);
-    if (d.getDate() < 21) diff -= 1;
-    let isPar = (diff % 2 === 0);
-    // Em Set 2026 (ciclo de Aug 21 a Sep 20 = par), Didi está na Estendida.
-    if (equipe === "Didi") return isPar ? "Escala Estendida" : "Escala Padrão";
-    return isPar ? "Escala Padrão" : "Escala Estendida";
+    let cycleYear = d.getFullYear();
+    let cycleMonth = d.getMonth(); 
+    if (d.getDate() < 21) { cycleMonth--; if (cycleMonth < 0) { cycleMonth = 11; cycleYear--; } }
+    
+    // O ciclo de Agosto/2026 (mês 7) coloca Didi no Estendido. (Mês 7 para Setembro ciclo par)
+    let monthsPassed = (cycleYear - 2026) * 12 + (cycleMonth - 7);
+    let isEvenCycle = (monthsPassed % 2 === 0);
+    
+    if (equipe === "Didi") return isEvenCycle ? "Turno Estendido" : "Turno Padrão";
+    return isEvenCycle ? "Turno Padrão" : "Turno Estendido";
 }
 
 function getMinutosPrevistos(escala, dStr) {
     const dia = new Date(dStr + "T00:00:00").getDay();
-    if (dia === 0) return 0; // Domingo 0h
-    if (escala === "Escala Padrão") return (dia <= 5) ? 480 : 240; // Seg-Sex 8h, Sab 4h
-    return (dia <= 4) ? 540 : (dia === 5 ? 480 : 0); // Seg-Qui 9h, Sex 8h, Sab 0h
+    if (dia === 0) return 0; // Domingo
+    // Legado Horário 1 = Turno Padrão, Horário 2 = Turno Estendido
+    if (escala === "Turno Padrão" || escala === "Horário 1") return (dia <= 5) ? 480 : 240; 
+    return (dia <= 4) ? 540 : (dia === 5 ? 480 : 0); 
 }
 
 function timeToMins(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 function minsToTime(m) { return `${m<0?"-":""}${String(Math.floor(Math.abs(m)/60)).padStart(2,'0')}:${String(Math.floor(Math.abs(m)%60)).padStart(2,'0')}`; }
 
-// FORM DE APONTAMENTO
 function cancelarEdicao() {
-    document.getElementById('tripForm').reset();
-    document.getElementById('editTripId').value = '';
+    document.getElementById('tripForm').reset(); document.getElementById('editTripId').value = '';
     document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
     document.getElementById('btnSalvar').classList.replace('bg-orange-500', 'bg-blue-600');
     document.getElementById('btnSalvar').classList.replace('hover:bg-orange-600', 'hover:bg-blue-700');
 }
 
 function carregarParaEdicao(idTrip) {
-    const t = allTrips.find(x => x.idViagem === idTrip);
-    if(!t) return;
-    document.getElementById('editTripId').value = t.idViagem;
-    document.getElementById('dataTrabalho').value = t.data.split('T')[0];
-    document.getElementById('hrEntrada').value = t.entrada;
-    document.getElementById('hrInicioAlmoco').value = t.inicioAlmoco;
-    document.getElementById('hrFimAlmoco').value = t.fimAlmoco;
-    document.getElementById('hrSaida').value = t.saida;
-    
+    const t = allTrips.find(x => x.idViagem === idTrip); if(!t) return;
+    document.getElementById('editTripId').value = t.idViagem; document.getElementById('dataTrabalho').value = t.data.split('T')[0];
+    document.getElementById('hrEntrada').value = t.entrada; document.getElementById('hrInicioAlmoco').value = t.inicioAlmoco;
+    document.getElementById('hrFimAlmoco').value = t.fimAlmoco; document.getElementById('hrSaida').value = t.saida;
     document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento';
     document.getElementById('btnSalvar').classList.replace('bg-blue-600', 'bg-orange-500');
     document.getElementById('btnSalvar').classList.replace('hover:bg-blue-700', 'hover:bg-orange-600');
@@ -219,8 +191,7 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     const btnId = 'btnSalvar'; const msgId = 'msgSalvar';
     const originalText = isEdit ? '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento' : '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
     
-    document.getElementById(btnId).disabled = true; 
-    document.getElementById('btnSalvarTexto').innerHTML = '<span class="loader-small"></span> Aguarde...';
+    document.getElementById(btnId).disabled = true; document.getElementById('btnSalvarTexto').innerHTML = '<span class="loader-small"></span> Aguarde...';
     
     const dV = document.getElementById('dataTrabalho').value;
     const diaSemana = new Date(dV + "T00:00:00").getDay(); 
@@ -229,68 +200,45 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     const escA = determinarEscala(userData.equipe, dV);
     
     let mExt = minsTrab - getMinutosPrevistos(escA, dV); if (mExt < 0) mExt = 0;
-    if (diaSemana === 0) mExt = mExt * 2; // Domingo 100% (dobrado)
+    if (diaSemana === 0) mExt = mExt * 2; 
     const vHora = valoresHora[userData.nivel] || 0;
     
-    const payload = { 
-        action: isEdit ? 'editTrip' : 'saveTrip', 
-        idViagem: document.getElementById('editTripId').value,
-        login: userData.login, 
-        sigla: currentProject.sigla, 
-        tipoProjeto: currentProject.tipo, 
-        data: dV, 
-        escala: escA, 
-        entrada: document.getElementById('hrEntrada').value, 
-        inicioAlmoco: document.getElementById('hrInicioAlmoco').value, 
-        fimAlmoco: document.getElementById('hrFimAlmoco').value, 
-        saida: document.getElementById('hrSaida').value, 
-        totalHoras: minsToTime(minsTrab), 
-        horasExtras: minsToTime(mExt), 
-        valorHoraExtra: vHora, 
-        totalReceber: (mExt / 60) * vHora 
-    };
+    const payload = { action: isEdit ? 'editTrip' : 'saveTrip', idViagem: document.getElementById('editTripId').value, login: userData.login, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo, data: dV, escala: escA, entrada: document.getElementById('hrEntrada').value, inicioAlmoco: document.getElementById('hrInicioAlmoco').value, fimAlmoco: document.getElementById('hrFimAlmoco').value, saida: document.getElementById('hrSaida').value, totalHoras: minsToTime(minsTrab), horasExtras: minsToTime(mExt), valorHoraExtra: vHora, totalReceber: (mExt / 60) * vHora };
 
     const r = await fetchAPI(payload, btnId, 'btnSalvarTexto', msgId, originalText);
-    if(r && r.success) {
-        cancelarEdicao();
-        carregarTudo(); // Recarrega do banco
-        setTimeout(() => document.getElementById(msgId).classList.add('hidden'), 3000);
-    }
+    if(r && r.success) { cancelarEdicao(); carregarTudo(); setTimeout(() => document.getElementById(msgId).classList.add('hidden'), 3000); }
 });
 
-// RENDERIZAÇÃO DAS TABELAS (WORKPACE DO PROJETO)
+function obterDiaSemana(dataString) {
+    const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    return dias[new Date(dataString + "T00:00:00").getDay()];
+}
+
 function renderizarWorkspace() {
     const tbH = document.getElementById('tbHoras'); const tbF = document.getElementById('tbFinanceiro');
     tbH.innerHTML = ''; tbF.innerHTML = '';
-    
-    // Filtra apenas os registros do projeto selecionado
     const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo);
     let valorTotal = 0;
 
     if(projTrips.length > 0) {
-        // Ordena por data decrescente
         projTrips.sort((a, b) => new Date(b.data) - new Date(a.data));
-
         projTrips.forEach(t => {
-            let df = t.data;
-            if(t.data.includes('T')) df = t.data.split('T')[0].split('-').reverse().join('/');
-            
+            const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
+            const df = dateStr.split('-').reverse().join('/') + ` (${obterDiaSemana(dateStr)})`;
             const hExt = t.horasExtras !== '00:00';
             valorTotal += Number(t.totalReceber);
 
-            // Tabela 1: Registros de Atividades (Sem "Feitas")
             tbH.innerHTML += `
                 <tr class="hover:bg-slate-50 border-b transition-colors">
                     <td class="px-4 py-3 text-sm text-slate-600">${df}</td>
                     <td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td>
                     <td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${t.horasExtras}</td>
                     <td class="px-4 py-3 text-center space-x-2" data-pdf-ignore="true">
-                        <button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="abrirModalShare('${t.idViagem}')" class="text-slate-400 hover:text-blue-500 transition" title="Compartilhar"><i class="fa-solid fa-share-nodes"></i></button>
+                        <button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="abrirModalShare('${t.idViagem}')" class="text-slate-400 hover:text-blue-500 transition"><i class="fa-solid fa-share-nodes"></i></button>
                     </td>
                 </tr>`;
             
-            // Tabela 2: Previsão Financeira
             tbF.innerHTML += `
                 <tr class="hover:bg-slate-50 border-b transition-colors">
                     <td class="px-4 py-3 text-sm text-slate-600">${df}</td>
@@ -299,7 +247,6 @@ function renderizarWorkspace() {
                     <td class="px-4 py-3 text-right font-bold text-emerald-600">R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}</td>
                 </tr>`;
         });
-        
         document.getElementById('valorTotalProjeto').textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
     } else {
         tbH.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400">Nenhum registro para este projeto.</td></tr>';
@@ -308,7 +255,6 @@ function renderizarWorkspace() {
     }
 }
 
-// COMPARTILHADOS E COLEGAS
 function carregarColegas() {
     fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getUsers' }) }).then(r => r.json()).then(d => {
         if(d.success) {
@@ -320,15 +266,15 @@ function carregarColegas() {
         const list = document.getElementById('listaCompartilhados'); list.innerHTML = '';
         if(d.success && d.shared.length > 0) {
             d.shared.forEach(s => {
-                let dt = s.data; if(s.data.includes('T')) dt = s.data.split('T')[0].split('-').reverse().join('/');
-                list.innerHTML += `<div class="bg-slate-50 border rounded p-3 mb-2 flex justify-between items-center hover:bg-slate-100"><div><p class="text-xs font-bold text-slate-800">${s.sigla} - ${dt}</p><p class="text-[10px] text-slate-500">Enviado por: ${s.remetente}</p></div><button onclick='usarShared(${JSON.stringify(s)})' class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-2 py-1 rounded text-xs font-bold transition">Aproveitar</button></div>`;
+                const dtStr = s.data.includes('T') ? s.data.split('T')[0] : s.data;
+                const dtFmt = dtStr.split('-').reverse().join('/') + ` (${obterDiaSemana(dtStr)})`;
+                list.innerHTML += `<div class="bg-slate-50 border rounded p-3 mb-2 flex justify-between items-center hover:bg-slate-100"><div><p class="text-xs font-bold text-slate-800">${s.sigla} - ${dtFmt}</p><p class="text-[10px] text-slate-500">Enviado por: ${s.remetente}</p></div><button onclick='usarShared(${JSON.stringify(s)})' class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-2 py-1 rounded text-xs font-bold transition">Aproveitar</button></div>`;
             });
         } else { list.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Nenhum registro recebido.</p>'; }
     });
 }
 
 function usarShared(s) {
-    // Ao clicar em um recebido, ele cria/seleciona o projeto e preenche a data
     abrirWorkspace(s.sigla, s.tipoProjeto);
     document.getElementById('dataTrabalho').value = s.data.split('T')[0];
     document.getElementById('hrEntrada').value = s.entrada;
@@ -348,20 +294,22 @@ async function confirmarShare() {
     btn.innerHTML = 'Enviar'; btn.disabled = false; fecharModalShare(); alert('Compartilhado com sucesso!');
 }
 
-// PDF EXPORT (Apenas Log de Horas)
 function gerarPDF() {
     const { jsPDF } = window.jspdf; const doc = new jsPDF();
-    doc.setFontSize(14); doc.text(`Relatório de Viagens - ${currentProject.sigla} | ${userData.login}`, 14, 15);
-    doc.setFontSize(10); doc.text(`Nome: ${userData.nome} ${userData.sobrenome} | Categoria do Serviço: ${currentProject.tipo}`, 14, 22);
+    doc.setFontSize(16); 
+    // Título Exato solicitado
+    doc.text(`Relatório de Viagens - ${currentProject.sigla} | ${userData.login}`, 14, 15);
+    doc.setFontSize(10); 
+    doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome} | Serviço: ${currentProject.tipo}`, 14, 22);
     
-    // Configurado para renderizar apenas a Tabela 1, ignorando a coluna de Ações
+    // Configurado para renderizar apenas a Tabela 1 (Registros de Atividades), ignorando a coluna de Ações (índice 3)
     doc.autoTable({ 
         html: '#tableHorasHtml', 
         startY: 30, 
         theme: 'grid', 
         styles: { fontSize: 8 }, 
         headStyles: { fillColor: [30, 41, 59] }, 
-        columns: [0, 1, 2] // Ignora a coluna 3 (Ações)
+        columns: [0, 1, 2] // Exporta apenas Data, Escala, e Horas Extras
     });
     
     doc.save(`Relatorio_Viagens_${currentProject.sigla}_${userData.login}.pdf`);
