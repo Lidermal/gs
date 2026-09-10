@@ -1,52 +1,16 @@
-/* Reseta conflitos básicos */
-button:focus, input:focus, select:focus {
-    outline: none !important;
-    box-shadow: none !important;
-}
+button:focus, input:focus, select:focus { outline: none !important; box-shadow: none !important; }
+input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; filter: opacity(0.6); }
 
-/* Cursor no campo de tempo */
-input[type="time"]::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    filter: opacity(0.6);
-}
+.fade-in { animation: fadeIn 0.4s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Transições SPA */
-.fade-in { 
-    animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1); 
-}
+.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-@keyframes fadeIn { 
-    from { opacity: 0; transform: translateY(-8px); } 
-    to { opacity: 1; transform: translateY(0); } 
-}
-
-/* Scrollbars customizadas estilo painel de TI */
-.custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: #f1f5f9; 
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1; 
-    border-radius: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8; 
-}
-
-/* Loaders Unificados */
-.loader, .loader-small { 
-    border-radius: 50%; 
-    animation: spin 1s linear infinite; 
-    display: inline-block; 
-    vertical-align: middle; 
-}
+.loader, .loader-small { border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; }
 .loader { border: 3px solid #f3f3f3; border-top: 3px solid #2563eb; width: 20px; height: 20px; }
 .loader-small { border: 2px solid #ffffff40; border-top: 2px solid #ffffff; width: 16px; height: 16px; }
 
-@keyframes spin { 
-    0% { transform: rotate(0deg); } 
-    100% { transform: rotate(360deg); } 
-}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
