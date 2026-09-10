@@ -106,11 +106,15 @@ function abrirLoja(sigla) {
     allTrips.filter(t => t.sigla === sigla).forEach(t => { if(!categorias[t.tipo]) categorias[t.tipo] = 0; categorias[t.tipo]++; });
     
     Object.keys(categorias).sort().forEach(tipo => {
+        // Conta quantos registros REAIS existem (desconta o INIT se for o unico)
+        const tripsReais = allTrips.filter(t => t.sigla === sigla && t.tipo === tipo && !t.isInit).length;
+        const labelReg = tripsReais > 0 ? `${tripsReais} reg.` : 'Novo';
+
         grid2.innerHTML += `
             <div onclick="abrirWorkspace('${sigla}', '${tipo}')" class="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group">
                 <div class="flex justify-between items-center mb-3">
                     <div class="text-blue-500 group-hover:text-blue-700 transition"><i class="fa-solid fa-folder-open text-2xl"></i></div>
-                    <span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${categorias[tipo]} reg.</span>
+                    <span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${labelReg}</span>
                 </div>
                 <h4 class="text-sm font-bold text-slate-800 truncate" title="${tipo}">${tipo}</h4>
                 <p class="text-[10px] text-slate-400 mt-1 uppercase">Entrar no Workspace</p>
@@ -138,12 +142,22 @@ function checkOutros() {
 function abrirModalProjeto() { document.getElementById('modalProjeto').classList.remove('hidden'); }
 function fecharModalProjeto() { document.getElementById('modalProjeto').classList.add('hidden'); }
 
-function criarProjeto() {
+async function criarProjeto() {
     const sigla = document.getElementById('novoProjSigla').value.trim().toUpperCase();
     let tipo = document.getElementById('novoProjTipo').value;
     if (tipo === 'Outros') tipo = document.getElementById('novoProjOutros').value.trim();
     if(!sigla) return alert("Informe a sigla da loja!");
-    fecharModalProjeto(); abrirWorkspace(sigla, tipo);
+    
+    fecharModalProjeto(); 
+    
+    // CORREÇÃO 1: Salva no banco antes de abrir
+    // Isso garante que o projeto apareça na lista mesmo sem horas
+    await fetchAPI({ action: 'initProject', login: userData.login, sigla: sigla, tipoProjeto: tipo }, null, null, null, null);
+    
+    // Recarrega a lista para garantir que o "fantasma" esteja lá
+    await carregarTudo();
+    
+    abrirWorkspace(sigla, tipo);
 }
 
 function abrirWorkspace(sigla, tipo) {
@@ -232,7 +246,10 @@ function obterDiaSemana(dataString) {
 function renderizarWorkspace() {
     const tbH = document.getElementById('tbHoras'); const tbF = document.getElementById('tbFinanceiro');
     tbH.innerHTML = ''; tbF.innerHTML = '';
-    const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo);
+    
+    // CORREÇÃO 1: Filtra o registro "INIT" para não mostrar na tabela de horas
+    const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
+    
     let valorTotal = 0;
 
     if(projTrips.length > 0) {
@@ -243,7 +260,6 @@ function renderizarWorkspace() {
             const hExt = t.horasExtras !== '00:00';
             valorTotal += Number(t.totalReceber);
 
-            // Tabela com apenas Lápis e Lixeira nas Ações
             tbH.innerHTML += `
                 <tr class="hover:bg-slate-50 border-b transition-colors">
                     <td class="px-4 py-3 text-sm text-slate-600">${df}</td>
@@ -281,6 +297,7 @@ function carregarColegas() {
         const list = document.getElementById('listaCompartilhados'); list.innerHTML = '';
         if(d.success && d.shared.length > 0) {
             d.shared.forEach(s => {
+                // CORREÇÃO 2: Passa o objeto inteiro com ID para a função de aceitar
                 list.innerHTML += `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2 flex justify-between items-center hover:bg-white hover:border-blue-300 transition group shadow-sm"><div><p class="text-xs font-bold text-slate-800 uppercase">${s.sigla} - ${s.tipoProjeto}</p><p class="text-[10px] text-slate-500 mt-1">Enviado por: <b>${s.remetente}</b> (${s.trips.length} reg.)</p></div><button onclick='usarSharedProject(${JSON.stringify(s)})' class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition">Aproveitar Projeto</button></div>`;
             });
         } else { list.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto recebido.</p>'; }
@@ -297,22 +314,23 @@ async function usarSharedProject(sharedData) {
         const dV = trip.data.includes('T') ? trip.data.split('T')[0] : trip.data;
         const minsTrab = (timeToMins(trip.inicioAlmoco) - timeToMins(trip.entrada)) + (timeToMins(trip.saida) - timeToMins(trip.fimAlmoco));
         
-        // Recalcula o Turno de acordo com a equipe de QUEM ESTÁ RECEBENDO
         const escA = determinarEscala(userData.equipe, dV);
         let mExt = minsTrab - getMinutosPrevistos(escA, dV); if (mExt < 0) mExt = 0;
-        
-        // Verifica Domingo
         if (new Date(dV + "T00:00:00").getDay() === 0) mExt = mExt * 2; 
-        
-        // Aplica o Nível de QUEM ESTÁ RECEBENDO
         const vHora = valoresHora[userData.nivel] || 0;
 
         return { login: userData.login, sigla: sharedData.sigla, tipoProjeto: sharedData.tipoProjeto, data: dV, escala: escA, entrada: trip.entrada, inicioAlmoco: trip.inicioAlmoco, fimAlmoco: trip.fimAlmoco, saida: trip.saida, totalHoras: minsToTime(minsTrab), horasExtras: minsToTime(mExt), valorHoraExtra: vHora, totalReceber: (mExt / 60) * vHora };
     });
 
-    const r = await fetchAPI({ action: 'saveMultipleTrips', trips: novasViagensRecalculadas }, null, null, null, null);
+    // CORREÇÃO 2: Envia o ID do compartilhamento para o backend marcar como ACEITO
+    const r = await fetchAPI({ action: 'saveMultipleTrips', trips: novasViagensRecalculadas, idCompartilhamento: sharedData.idShare }, null, null, null, null);
+    
     document.getElementById('msgRecebendo').classList.add('hidden');
-    if(r && r.success) { alert("Projeto importado e recalculado com sucesso!"); carregarTudo(); }
+    if(r && r.success) { 
+        alert("Projeto importado e recalculado com sucesso!"); 
+        carregarTudo(); 
+        carregarColegas(); // Recarrega a lista de compartilhados para sumir o que foi aceito
+    }
 }
 
 function abrirModalShare() { document.getElementById('modalShare').classList.remove('hidden'); }
