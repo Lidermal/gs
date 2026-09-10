@@ -94,9 +94,7 @@
             </button>
         </div>
         
-        <div id="projectsGrid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            <!-- Projetos preenchidos por JS -->
-        </div>
+        <div id="projectsGrid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
 
         <div class="mt-12 bg-white rounded-xl shadow-sm border overflow-hidden p-6">
             <h2 class="text-sm font-bold text-purple-900 uppercase mb-4"><i class="fa-solid fa-inbox mr-2"></i> Projetos Compartilhados Comigo</h2>
@@ -116,8 +114,8 @@
         </div>
 
         <main class="grid grid-cols-1 xl:grid-cols-12 gap-6">
-            <!-- Apontamento -->
             <section class="xl:col-span-4 space-y-6">
+                <!-- Apontamento -->
                 <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
                     <div class="bg-slate-50 px-5 py-4 border-b flex justify-between items-center">
                         <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-clock-rotate-left text-blue-500 mr-2"></i> Apontamento de Horas</h2>
@@ -139,12 +137,11 @@
                 </div>
             </section>
 
-            <!-- Tabelas -->
             <section class="xl:col-span-8 space-y-6">
-                <!-- Registros de Atividades (Feitas Oculto) -->
+                <!-- Registros de Atividades -->
                 <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
                     <div class="bg-slate-50 px-5 py-3 border-b flex justify-between items-center">
-                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-clipboard-list text-slate-500 mr-2"></i> Registros de Atividades</h2>
+                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-list-check text-slate-500 mr-2"></i> Registros de Atividades</h2>
                     </div>
                     <div class="overflow-auto custom-scrollbar flex-1 p-0">
                         <table class="min-w-full text-sm text-left" id="tableHorasHtml">
@@ -161,7 +158,7 @@
                     </div>
                 </div>
 
-                <!-- Financeiro com Totalizador Melhorado -->
+                <!-- Previsão Financeira -->
                 <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
                     <div class="bg-slate-800 px-5 py-3 border-b border-slate-900"><h2 class="text-sm font-bold text-white uppercase"><i class="fa-solid fa-wallet text-emerald-400 mr-2"></i> Previsão Financeira</h2></div>
                     <div class="overflow-auto custom-scrollbar flex-1 p-0 flex flex-col">
@@ -177,8 +174,8 @@
                             <tbody id="tbFinanceiro" class="divide-y divide-slate-100"></tbody>
                         </table>
                     </div>
-                    <!-- Rodapé Melhorado -->
-                    <div class="bg-slate-900 border-t border-slate-700 px-6 py-4 flex justify-between items-center text-white">
+                    <!-- Rodapé Escuro Identico ao Exemplo -->
+                    <div class="bg-[#1e293b] px-6 py-4 flex justify-between items-center text-white">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Acumulado (Neste Projeto)</span>
                         <span class="text-xl font-bold text-emerald-400" id="valorTotalProjeto">R$ 0,00</span>
                     </div>
@@ -219,11 +216,10 @@
     <div id="modalShare" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center fade-in">
         <div class="bg-white p-6 rounded-xl shadow-xl w-96 border-t-4 border-blue-600">
             <h3 class="text-lg font-bold text-slate-800 mb-4"><i class="fa-solid fa-share-nodes text-blue-500 mr-2"></i> Compartilhar Registro</h3>
-            <p class="text-xs text-slate-500 mb-4">Selecione o colega que também participou deste apontamento.</p>
             <select id="shareUserSelect" class="w-full px-3 py-2 border rounded mb-4 text-sm bg-slate-50"></select>
             <input type="hidden" id="shareTripId">
             <div class="flex justify-end gap-2">
-                <button onclick="fecharModalShare()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
+                <button onclick="fecharModalShare()" class="px-4 py-2 text-sm font-bold text-slate-500">Cancelar</button>
                 <button onclick="confirmarShare()" id="btnConfirmShare" class="px-4 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded shadow">Enviar</button>
             </div>
         </div>
