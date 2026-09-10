@@ -61,7 +61,6 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         localStorage.setItem('usuarioAtivo', JSON.stringify(result.user));
         userData = result.user; 
         document.getElementById('loginMsg').className = "text-center text-sm font-semibold mt-3 text-blue-600";
-        // Correção de sintaxe aplicada abaixo (usando aspas simples por fora)
         document.getElementById('loginMsg').innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Carregando workspace...';
         setTimeout(() => { showView('dashboardView'); initDashboard(); document.getElementById('loginForm').reset(); document.getElementById('loginMsg').classList.add('hidden'); }, 1200);
     }
@@ -105,9 +104,20 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     btn.disabled = true; document.getElementById('btnSalvarTexto').innerHTML = '<span class="loader-small"></span> Processando...';
     
     const dV = document.getElementById('dataTrabalho').value;
+    const dataObj = new Date(dV + "T00:00:00");
+    const diaSemana = dataObj.getDay(); // 0 = Domingo, 6 = Sábado
+    
     const minsTrab = (timeToMins(document.getElementById('hrInicioAlmoco').value) - timeToMins(document.getElementById('hrEntrada').value)) + (timeToMins(document.getElementById('hrSaida').value) - timeToMins(document.getElementById('hrFimAlmoco').value));
     const escA = determinarEscala(userData.equipe, dV);
-    let mExt = minsTrab - getMinutosPrevistos(escA, dV); if (mExt < 0) mExt = 0;
+    
+    let mExt = minsTrab - getMinutosPrevistos(escA, dV); 
+    if (mExt < 0) mExt = 0;
+    
+    // REGRA NOVA: Se for Domingo, a hora extra é dobrada (100%)
+    if (diaSemana === 0) {
+        mExt = mExt * 2;
+    }
+    
     const vHora = valoresHora[userData.nivel] || 0;
     
     const payload = { action: 'saveTrip', login: userData.login, sigla: document.getElementById('sigla').value.toUpperCase(), tipoProjeto: document.getElementById('tipoProjeto').value, data: dV, escala: `Horário ${escA}`, entrada: document.getElementById('hrEntrada').value, inicioAlmoco: document.getElementById('hrInicioAlmoco').value, fimAlmoco: document.getElementById('hrFimAlmoco').value, saida: document.getElementById('hrSaida').value, totalHoras: minsToTime(minsTrab), horasExtras: minsToTime(mExt), valorHoraExtra: vHora, totalReceber: (mExt / 60) * vHora };
@@ -200,7 +210,6 @@ function gerarPDF() {
     doc.setFontSize(16); doc.text("Relatório de Controle Operacional de Viagens", 14, 15);
     doc.setFontSize(10); doc.text(`Técnico: ${userData.nome} ${userData.sobrenome} | Perfil: Equipe ${userData.equipe} - ${userData.nivel}`, 14, 22);
     
-    // Tabela 1 ignora a coluna 5 (Ações de Compartilhar)
     doc.autoTable({ html: '#tableHorasHtml', startY: 30, theme: 'grid', styles: { fontSize: 8 }, headStyles: { fillColor: [71, 85, 105] }, columns: [0, 1, 2, 3, 4] });
     doc.text("Previsão Financeira", 14, doc.lastAutoTable.finalY + 12);
     doc.autoTable({ html: '#tableFinHtml', startY: doc.lastAutoTable.finalY + 15, theme: 'grid', styles: { fontSize: 8 }, headStyles: { fillColor: [15, 23, 42] } });
