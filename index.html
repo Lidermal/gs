@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestão de Viagens</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="logo.png">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Efeito suave na transição de telas */
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Loader giratório */
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen">
+
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md fade-in" id="mainCard">
+        
+        <!-- Logo -->
+        <div class="flex justify-center mb-6">
+            <img src="logo.png" alt="Logo" class="h-20 object-contain" onerror="this.src='https://via.placeholder.com/150?text=Logo'">
+        </div>
+
+        <!-- TELA DE LOGIN -->
+        <div id="loginSection">
+            <h2 class="text-2xl font-bold text-slate-700 text-center mb-6">Acesso ao Sistema</h2>
+            
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600">Usuário (nome.sobrenome)</label>
+                    <input type="text" id="loginUser" required placeholder="ex: joao.silva" 
+                           class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 lowercase">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600">Senha</label>
+                    <input type="password" id="loginSenha" required 
+                           class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
+                    <span id="loginText">Entrar</span>
+                </button>
+                <div id="loginMsg" class="text-center text-sm font-medium mt-2 hidden"></div>
+            </form>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-slate-600">Primeiro acesso?</p>
+                <button onclick="toggleView('register')" class="text-blue-600 hover:underline font-semibold mt-1">Crie sua conta aqui</button>
+            </div>
+        </div>
+
+        <!-- TELA DE PRIMEIRO ACESSO (CADASTRO) -->
+        <div id="registerSection" class="hidden">
+            <h2 class="text-2xl font-bold text-slate-700 text-center mb-6">Primeiro Acesso</h2>
+            
+            <form id="registerForm" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Nome</label>
+                        <input type="text" id="regNome" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600">Sobrenome</label>
+                        <input type="text" id="regSobrenome" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-600">Equipe</label>
+                    <select id="regEquipe" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Selecione...</option>
+                        <option value="Anna">Equipe da Anna</option>
+                        <option value="Didi">Equipe do Didi</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-600">Nível de Suporte</label>
+                    <select id="regNivel" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Selecione...</option>
+                        <option value="Suporte NN">Suporte NN</option>
+                        <option value="Suporte N1">Suporte N1</option>
+                        <option value="Suporte N2">Suporte N2</option>
+                        <option value="Suporte N3">Suporte N3</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-600">Crie uma Senha</label>
+                    <input type="password" id="regSenha" required class="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                </div>
+
+                <button type="submit" id="btnRegister" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg transition duration-200 mt-2">
+                    <span id="regText">Cadastrar</span>
+                </button>
+                <div id="regMsg" class="text-center text-sm font-medium mt-2 hidden"></div>
+            </form>
+
+            <div class="mt-6 text-center">
+                <button onclick="toggleView('login')" class="text-slate-500 hover:text-slate-700 font-semibold text-sm">Voltar para o Login</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // SUA URL DO GOOGLE APPS SCRIPT
+        const API_URL = "https://script.google.com/macros/s/AKfycbyv6rztF_a5ePHzRhzCMJDawDOHhF-le_3MgvoeMY2WUGjVRQBPmt2cSuV6Mp71MGnpUQ/exec";
+
+        // Alternar entre Login e Cadastro
+        function toggleView(view) {
+            const loginSec = document.getElementById('loginSection');
+            const regSec = document.getElementById('registerSection');
+            
+            if(view === 'register') {
+                loginSec.classList.add('hidden');
+                regSec.classList.remove('hidden');
+                regSec.classList.add('fade-in');
+            } else {
+                regSec.classList.add('hidden');
+                loginSec.classList.remove('hidden');
+                loginSec.classList.add('fade-in');
+            }
+        }
+
+        // Função genérica para requisições
+        async function fetchAPI(data, btnId, textId, msgId, originalText) {
+            const btn = document.getElementById(btnId);
+            const textSpan = document.getElementById(textId);
+            const msgDiv = document.getElementById(msgId);
+            
+            // Loading state
+            btn.disabled = true;
+            btn.classList.add('opacity-75', 'cursor-not-allowed');
+            textSpan.innerHTML = '<span class="loader"></span> Aguarde...';
+            msgDiv.classList.add('hidden');
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    // text/plain é o truque para não cair no bloqueio de CORS do Google
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                msgDiv.classList.remove('hidden');
+                if(result.success) {
+                    msgDiv.className = "text-center text-sm font-medium mt-2 text-green-600";
+                    msgDiv.textContent = result.message || "Sucesso!";
+                    return result; // Retorna os dados para a função chamadora
+                } else {
+                    msgDiv.className = "text-center text-sm font-medium mt-2 text-red-500";
+                    msgDiv.textContent = result.message;
+                    return false;
+                }
+            } catch (error) {
+                msgDiv.classList.remove('hidden');
+                msgDiv.className = "text-center text-sm font-medium mt-2 text-red-500";
+                msgDiv.textContent = "Erro de conexão. Tente novamente.";
+                return false;
+            } finally {
+                // Reset do botão
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                textSpan.innerHTML = originalText;
+            }
+        }
+
+        // Submissão do Cadastro
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                action: 'register',
+                nome: document.getElementById('regNome').value,
+                sobrenome: document.getElementById('regSobrenome').value,
+                equipe: document.getElementById('regEquipe').value,
+                nivel: document.getElementById('regNivel').value,
+                senha: document.getElementById('regSenha').value
+            };
+
+            const result = await fetchAPI(data, 'btnRegister', 'regText', 'regMsg', 'Cadastrar');
+            
+            if(result) {
+                // Limpa o formulário e avisa qual é o login gerado
+                document.getElementById('registerForm').reset();
+                document.getElementById('regMsg').innerHTML = `Cadastro realizado!<br>Seu login é: <b>${result.login}</b>`;
+                
+                // Joga o usuário gerado para a tela de login após 3 segundos
+                setTimeout(() => {
+                    document.getElementById('loginUser').value = result.login;
+                    toggleView('login');
+                }, 3000);
+            }
+        });
+
+        // Submissão do Login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                action: 'login',
+                login: document.getElementById('loginUser').value.trim(),
+                senha: document.getElementById('loginSenha').value
+            };
+
+            const result = await fetchAPI(data, 'btnLogin', 'loginText', 'loginMsg', 'Entrar');
+            
+            if(result) {
+                // Salva os dados do usuário no LocalStorage para usarmos no Dashboard
+                localStorage.setItem('usuarioAtivo', JSON.stringify(result.user));
+                
+                // Redireciona para o painel (Ainda vamos criar no próximo passo)
+                document.getElementById('loginMsg').textContent = "Redirecionando...";
+                setTimeout(() => {
+                    window.location.href = "dashboard.html";
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>
