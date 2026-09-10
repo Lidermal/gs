@@ -118,7 +118,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     
     if(result) {
         localStorage.setItem('usuarioAtivo', JSON.stringify(result.user));
-        userData = result.user; // Atualiza a variável global
+        userData = result.user; 
+        document.getElementById('loginMsg').className = "text-center text-sm font-medium mt-2 text-green-600";
         document.getElementById('loginMsg').textContent = "Acessando...";
         
         setTimeout(() => {
@@ -134,6 +135,10 @@ function logout() {
     localStorage.removeItem('usuarioAtivo');
     userData = null;
     showView('authView');
+    
+    // Limpa a tabela para não mostrar dados vazados quando voltar pro login
+    document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-4 text-center">Aguardando login...</td></tr>';
+    document.getElementById('tbFinanceiro').innerHTML = '';
 }
 
 // ==========================================
@@ -148,7 +153,8 @@ function determinarEscala(equipe, dataViagemStr) {
     const dataViagem = new Date(dataViagemStr + "T00:00:00");
     const ano = dataViagem.getFullYear();
     const mes = dataViagem.getMonth();
-    const dataBase = new Date(2026, 8, 21); 
+    
+    // Lógica de virada de mês a partir de 21/09/2026
     let mesesDiferenca = (ano - 2026) * 12 + (mes - 8);
     if (dataViagem.getDate() < 21) mesesDiferenca -= 1;
     let isDidiHorario2 = (mesesDiferenca % 2 === 0);
@@ -252,6 +258,8 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
 });
 
 async function carregarRelatorios() {
+    document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-4 text-center"><span class="loader-small border-slate-600 border-top-transparent"></span> Carregando dados...</td></tr>';
+    
     try {
         const resp = await fetch(API_URL, {
             method: 'POST',
@@ -273,7 +281,7 @@ async function carregarRelatorios() {
                     <tr class="border-b hover:bg-slate-50">
                         <td class="p-2">${dataFormatada}</td>
                         <td class="p-2 font-bold">${trip.sigla}</td>
-                        <td class="p-2">${trip.escala}</td>
+                        <td class="p-2 text-xs text-slate-500">${trip.escala}</td>
                         <td class="p-2 text-center">${trip.totalHoras}</td>
                         <td class="p-2 text-center font-bold text-blue-600">${trip.horasExtras}</td>
                     </tr>`;
@@ -293,5 +301,6 @@ async function carregarRelatorios() {
         }
     } catch (err) {
         console.error("Erro ao carregar viagens", err);
+        document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-4 text-center text-red-500">Erro ao buscar dados.</td></tr>';
     }
 }
