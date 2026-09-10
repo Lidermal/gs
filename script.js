@@ -686,21 +686,96 @@ async function confirmarShare() {
     showToast('Projeto compartilhado com sucesso!', 'success', 'Compartilhado');
 }
 
+// ===== FUNÇÃO GERAR PDF ATUALIZADA =====
 function gerarPDF() {
     const { jsPDF } = window.jspdf; 
     const doc = new jsPDF();
+    
+    // Cabeçalho do PDF
     doc.setFontSize(16); 
-    doc.text(`Relatório de Viagens - ${currentProject.sigla} | ${userData.login}`, 14, 15);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Relatório de Viagens - ${currentProject.sigla}`, 14, 15);
+    
     doc.setFontSize(10); 
-    doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome} | Serviço: ${currentProject.tipo}`, 14, 22);
-    doc.autoTable({ 
-        html: '#tableHorasHtml', 
-        startY: 30, 
-        theme: 'grid', 
-        styles: { fontSize: 8 }, 
-        headStyles: { fillColor: [30, 41, 59] }, 
-        columns: [0, 1, 2] 
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome} | Login: ${userData.login}`, 14, 22);
+    doc.text(`Serviço: ${currentProject.tipo} | Equipe: ${userData.equipe} | Nível: ${userData.nivel}`, 14, 28);
+    
+    // Preparar dados para a tabela
+    const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
+    projTrips.sort((a, b) => new Date(b.data) - new Date(a.data));
+    
+    const tableData = projTrips.map(t => {
+        const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
+        const df = dateStr.split('-').reverse().join('/');
+        const diaSemana = obterDiaSemana(dateStr);
+        
+        return [
+            `${df} (${diaSemana})`,
+            `${t.entrada} - ${t.inicioAlmoco} / ${t.fimAlmoco} - ${t.saida}`,
+            t.horasExtras,
+            `R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}`
+        ];
     });
+    
+    // Gerar tabela com colunas personalizadas
+    doc.autoTable({
+        startY: 35,
+        head: [['Data', 'Horários (Entrada - Pausa / Retorno - Saída)', 'Horas Extras', 'Valor (R$)']],
+        body: tableData,
+        theme: 'grid',
+        styles: { 
+            fontSize: 8,
+            cellPadding: 3,
+            lineColor: [203, 213, 225],
+            lineWidth: 0.1
+        },
+        headStyles: { 
+            fillColor: [30, 41, 59],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 9
+        },
+        columnStyles: {
+            0: { cellWidth: 35, halign: 'center' },
+            1: { cellWidth: 80, halign: 'center', font: 'courier' },
+            2: { cellWidth: 25, halign: 'center', fontStyle: 'bold' },
+            3: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129] }
+        },
+        alternateRowStyles: {
+            fillColor: [248, 250, 252]
+        }
+    });
+    
+    // Adicionar total acumulado no final
+    const finalY = doc.lastAutoTable.finalY + 10;
+    const valorTotal = projTrips.reduce((sum, t) => sum + Number(t.totalReceber), 0);
+    
+    doc.setFillColor(30, 41, 59);
+    doc.rect(14, finalY, 182, 12, 'F');
+    
+    doc.setFontSize(10);
+    doc.setTextColor(255, 255, 255);
+    doc.text('TOTAL ACUMULADO:', 18, finalY + 8);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(16, 185, 129);
+    doc.text(`R$ ${valorTotal.toFixed(2).replace('.', ',')}`, 160, finalY + 8, { align: 'right' });
+    
+    // Rodapé
+    const pageCount = doc.internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+            `Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')} | Página ${i} de ${pageCount}`,
+            105,
+            doc.internal.pageSize.height - 10,
+            { align: 'center' }
+        );
+    }
+    
     doc.save(`Relatorio_Viagens_${currentProject.sigla}_${userData.login}.pdf`);
-    showToast('PDF gerado com sucesso!', 'success', 'Exportação');
+    showToast('PDF gerado com sucesso!', 'success', 'Exportação Concluída');
 }
