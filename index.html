@@ -4,252 +4,190 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão de Viagens | NOC & Suporte</title>
-    
     <link rel="icon" type="image/png" href="logo.png">
-    
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- CSS Customizado -->
+    <!-- Bibliotecas para PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-slate-100 min-h-screen font-sans text-slate-800">
 
-    <!-- ========================================== -->
-    <!-- MÓDULO 1: AUTENTICAÇÃO                     -->
-    <!-- ========================================== -->
+    <!-- AUTENTICAÇÃO -->
     <div id="authView" class="flex items-center justify-center min-h-screen bg-slate-900 bg-opacity-95 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
-        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border-t-4 border-blue-600" id="mainCard">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border-t-4 border-blue-600">
+            <div class="flex justify-center mb-6"><img src="logo.png" alt="Logo" class="h-20 drop-shadow-md"></div>
             
-            <div class="flex justify-center mb-6">
-                <img src="logo.png" alt="Logo" class="h-20 object-contain drop-shadow-md" onerror="this.src='https://via.placeholder.com/150?text=Logo'">
-            </div>
-
-            <!-- LOGIN -->
+            <!-- Login -->
             <div id="loginSection">
                 <h2 class="text-xl font-bold text-slate-800 text-center mb-6 uppercase tracking-wider"><i class="fa-solid fa-lock text-slate-400 mr-2"></i> Autenticação</h2>
                 <form id="loginForm" class="space-y-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Usuário</label>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase">Usuário</label>
                         <div class="relative mt-1">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-user"></i></span>
-                            <input type="text" id="loginUser" required placeholder="nome.sobrenome" class="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 lowercase bg-slate-50 transition">
+                            <input type="text" id="loginUser" required placeholder="nome.sobrenome" class="block w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 lowercase bg-slate-50">
                         </div>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Senha</label>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase">Senha</label>
                         <div class="relative mt-1">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-key"></i></span>
-                            <input type="password" id="loginSenha" required class="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 transition">
+                            <input type="password" id="loginSenha" required class="block w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-slate-50">
                         </div>
                     </div>
-                    <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/30 text-white font-bold py-2.5 px-4 rounded-lg transition-all duration-200 mt-4">
+                    <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg mt-4 shadow-lg shadow-blue-600/30">
                         <span id="loginText">Acessar Sistema <i class="fa-solid fa-arrow-right-to-bracket ml-2"></i></span>
                     </button>
                     <div id="loginMsg" class="text-center text-sm font-medium mt-3 hidden"></div>
                 </form>
-                <div class="mt-6 pt-4 border-t border-slate-100 text-center">
-                    <button type="button" onclick="toggleAuthView('register')" class="text-slate-500 hover:text-blue-600 font-semibold text-sm transition"><i class="fa-solid fa-user-plus mr-1"></i> Solicitar Acesso (1º Login)</button>
+                <div class="mt-6 pt-4 border-t text-center">
+                    <button onclick="toggleAuthView('register')" class="text-slate-500 hover:text-blue-600 font-semibold text-sm"><i class="fa-solid fa-user-plus mr-1"></i> Solicitar Acesso</button>
                 </div>
             </div>
 
-            <!-- CADASTRO -->
+            <!-- Cadastro -->
             <div id="registerSection" class="hidden">
                 <h2 class="text-xl font-bold text-slate-800 text-center mb-6 uppercase tracking-wider"><i class="fa-solid fa-id-card text-slate-400 mr-2"></i> Novo Registro</h2>
                 <form id="registerForm" class="space-y-3">
                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500">NOME</label>
-                            <input type="text" id="regNome" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500">SOBRENOME</label>
-                            <input type="text" id="regSobrenome" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                        </div>
+                        <input type="text" id="regNome" required placeholder="Nome" class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
+                        <input type="text" id="regSobrenome" required placeholder="Sobrenome" class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
                     </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500">EQUIPE</label>
-                        <select id="regEquipe" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                            <option value="">Selecione...</option>
-                            <option value="Anna">NOC/Equipe Anna</option>
-                            <option value="Didi">Suporte/Equipe Didi</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500">NÍVEL DE ATUAÇÃO</label>
-                        <select id="regNivel" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                            <option value="">Selecione...</option>
-                            <option value="Suporte NN">Suporte NN</option>
-                            <option value="Suporte N1">Suporte N1</option>
-                            <option value="Suporte N2">Suporte N2</option>
-                            <option value="Suporte N3">Suporte N3</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500">SENHA DE ACESSO</label>
-                        <input type="password" id="regSenha" required class="mt-1 block w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-slate-50">
-                    </div>
-                    <button type="submit" id="btnRegister" class="w-full bg-slate-800 hover:bg-slate-900 shadow-lg text-white font-bold py-2 px-4 rounded transition-all duration-200 mt-4">
+                    <select id="regEquipe" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
+                        <option value="">Selecione Equipe...</option><option value="Anna">Equipe Anna</option><option value="Didi">Equipe Didi</option>
+                    </select>
+                    <select id="regNivel" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
+                        <option value="">Selecione Nível...</option><option value="Suporte NN">Suporte NN</option><option value="Suporte N1">Suporte N1</option><option value="Suporte N2">Suporte N2</option><option value="Suporte N3">Suporte N3</option>
+                    </select>
+                    <input type="password" id="regSenha" required placeholder="Crie uma Senha" class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
+                    <button type="submit" id="btnRegister" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 rounded mt-4">
                         <span id="regText"><i class="fa-solid fa-save mr-2"></i> Criar Credencial</span>
                     </button>
                     <div id="regMsg" class="text-center text-sm font-medium mt-3 hidden"></div>
                 </form>
-                <div class="mt-4 pt-4 border-t border-slate-100 text-center">
-                    <button type="button" onclick="toggleAuthView('login')" class="text-slate-500 hover:text-slate-800 font-semibold text-sm transition"><i class="fa-solid fa-arrow-left mr-1"></i> Voltar</button>
-                </div>
+                <div class="mt-4 pt-4 border-t text-center"><button onclick="toggleAuthView('login')" class="text-slate-500 font-semibold text-sm">Voltar</button></div>
             </div>
         </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- MÓDULO 2: DASHBOARD PROFISSIONAL           -->
-    <!-- ========================================== -->
+    <!-- DASHBOARD -->
     <div id="dashboardView" class="hidden">
-        <!-- Top Navbar estilo CoreUI -->
-        <header class="bg-slate-900 border-b border-slate-700 sticky top-0 z-50">
+        <header class="bg-slate-900 border-b border-slate-700 sticky top-0 z-40">
             <div class="container mx-auto px-4 h-16 flex justify-between items-center">
                 <div class="flex items-center gap-4">
-                    <img src="logo.png" alt="Logo" class="h-10 bg-white rounded-md p-1 shadow">
-                    <div class="hidden sm:block">
-                        <h1 class="text-white font-bold tracking-wide">Workspace Viagens</h1>
-                        <span class="text-slate-400 text-xs">Módulo de Controle Operacional</span>
-                    </div>
+                    <img src="logo.png" alt="Logo" class="h-10 bg-white rounded-md p-1">
+                    <h1 class="text-white font-bold hidden sm:block">Workspace Viagens</h1>
                 </div>
-                
                 <div class="flex items-center gap-4">
                     <div class="text-right hidden md:block">
-                        <p class="text-sm font-medium text-white" id="navUserName">Janaelson Silva</p>
-                        <p class="text-xs text-slate-400" id="navUserRole">Equipe Didi • N1</p>
+                        <p class="text-sm font-medium text-white" id="navUserName"></p>
+                        <p class="text-xs text-slate-400" id="navUserRole"></p>
                     </div>
-                    <div class="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold border-2 border-slate-700">
-                        <i class="fa-solid fa-user-astronaut"></i>
-                    </div>
-                    <div class="h-6 w-px bg-slate-700 mx-1"></div>
-                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition flex items-center gap-2 text-sm font-semibold">
-                        <i class="fa-solid fa-power-off"></i> <span class="hidden sm:inline">Encerrar</span>
-                    </button>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 font-semibold text-sm"><i class="fa-solid fa-power-off mr-1"></i> Sair</button>
                 </div>
             </div>
         </header>
 
-        <main class="container mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
-            
-            <!-- Painel Esquerdo: Entrada de Dados -->
+        <main class="container mx-auto p-4 grid grid-cols-1 xl:grid-cols-12 gap-6">
+            <!-- Esquerda: Formulário e Recebidos -->
             <section class="xl:col-span-4 space-y-6">
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-clock-rotate-left text-blue-500 mr-2"></i> Lançar Apontamento</h2>
+                <!-- Painel de Registro -->
+                <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <div class="bg-slate-50 px-5 py-4 border-b flex justify-between items-center">
+                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-clock-rotate-left text-blue-500 mr-2"></i> Apontamento</h2>
+                        <button type="button" onclick="document.getElementById('tripForm').reset()" class="text-xs text-slate-500 hover:text-slate-800"><i class="fa-solid fa-eraser"></i> Limpar</button>
                     </div>
-                    
                     <form id="tripForm" class="p-5 space-y-4">
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-500 mb-1">CÓD. LOJA</label>
-                                <div class="relative">
-                                    <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400"><i class="fa-solid fa-store"></i></span>
-                                    <input type="text" id="sigla" required maxlength="3" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 uppercase bg-slate-50">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-500 mb-1">CATEGORIA</label>
-                                <select id="tipoProjeto" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-slate-50">
-                                    <option value="Projeto">Projeto</option>
-                                    <option value="Suporte">Suporte N1/N2</option>
-                                    <option value="Infraestrutura">Infraestrutura</option>
-                                    <option value="Outros">Outros</option>
-                                </select>
-                            </div>
+                            <input type="text" id="sigla" required maxlength="3" placeholder="LJA" title="Sigla da Loja" class="w-full px-3 py-2 text-sm border rounded uppercase bg-slate-50">
+                            <select id="tipoProjeto" required title="Tipo" class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
+                                <option value="Projeto">Projeto</option><option value="Suporte">Suporte</option><option value="Outros">Outros</option>
+                            </select>
                         </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-1">DATA DA OPERAÇÃO</label>
-                            <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 bg-slate-50">
+                        <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
+                        <div class="bg-slate-100 p-4 rounded-lg border grid grid-cols-2 gap-3">
+                            <div><label class="block text-[10px] font-bold text-slate-500">ENTRADA</label><input type="time" id="hrEntrada" required class="w-full px-2 py-1 border rounded font-mono"></div>
+                            <div><label class="block text-[10px] font-bold text-orange-600">INÍCIO PAUSA</label><input type="time" id="hrInicioAlmoco" required class="w-full px-2 py-1 border rounded font-mono"></div>
+                            <div><label class="block text-[10px] font-bold text-orange-600">FIM PAUSA</label><input type="time" id="hrFimAlmoco" required class="w-full px-2 py-1 border rounded font-mono"></div>
+                            <div><label class="block text-[10px] font-bold text-slate-500">SAÍDA</label><input type="time" id="hrSaida" required class="w-full px-2 py-1 border rounded font-mono"></div>
                         </div>
-
-                        <div class="bg-slate-100 p-4 rounded-lg border border-slate-200 space-y-4">
-                            <h3 class="text-xs font-bold text-slate-600 uppercase border-b border-slate-200 pb-2"><i class="fa-regular fa-clock mr-1"></i> Cronograma do Dia</h3>
-                            
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-500">START (ENTRADA)</label>
-                                    <input type="time" id="hrEntrada" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 text-orange-600">INÍCIO PAUSA</label>
-                                    <input type="time" id="hrInicioAlmoco" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 text-orange-600">FIM PAUSA</label>
-                                    <input type="time" id="hrFimAlmoco" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
-                                </div>
-                                <div>
-                                    <label class="block text-[10px] font-bold text-slate-500">STOP (SAÍDA)</label>
-                                    <input type="time" id="hrSaida" required class="w-full px-2 py-1.5 text-sm border rounded bg-white font-mono">
-                                </div>
-                            </div>
-                        </div>
-
-                        <button type="submit" id="btnSalvar" class="w-full bg-blue-600 hover:bg-blue-700 shadow-md text-white font-bold py-2.5 rounded transition">
-                            <span id="btnSalvarTexto"><i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar no Banco</span>
-                        </button>
-                        <div id="msgSalvar" class="text-center text-sm font-medium hidden"></div>
+                        <button type="submit" id="btnSalvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded"><span id="btnSalvarTexto"><i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Banco</span></button>
+                        <div id="msgSalvar" class="text-center text-sm hidden"></div>
                     </form>
+                </div>
+
+                <!-- Viagens Compartilhadas Comigo -->
+                <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <div class="bg-purple-50 px-5 py-4 border-b border-purple-100"><h2 class="text-sm font-bold text-purple-900 uppercase"><i class="fa-solid fa-inbox mr-2"></i> Recebidos (Compartilhados)</h2></div>
+                    <div class="p-3 max-h-48 overflow-auto custom-scrollbar" id="listaCompartilhados">
+                        <!-- Itens renderizados via JS -->
+                    </div>
                 </div>
             </section>
 
-            <!-- Painel Direito: Datatables -->
+            <!-- Direita: Tabelas -->
             <section class="xl:col-span-8 space-y-6">
-                
                 <!-- Tabela 1 -->
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[350px]">
-                    <div class="bg-slate-50 px-5 py-4 border-b border-slate-200">
-                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-list-check text-slate-500 mr-2"></i> Log de Horas (Escalas & Extras)</h2>
+                <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
+                    <div class="bg-slate-50 px-5 py-3 border-b flex justify-between items-center">
+                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-list-check text-slate-500 mr-2"></i> Log de Horas</h2>
+                        <button onclick="gerarPDF()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded font-bold shadow"><i class="fa-solid fa-file-pdf mr-1"></i> Exportar PDF</button>
                     </div>
                     <div class="overflow-auto custom-scrollbar flex-1 p-0">
-                        <table class="min-w-full divide-y divide-slate-200 text-sm text-left">
-                            <thead class="bg-slate-100 sticky top-0 z-10">
+                        <table class="min-w-full text-sm text-left" id="tableHorasHtml">
+                            <thead class="bg-slate-100 sticky top-0">
                                 <tr>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Data</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Site</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Regra de Escala</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">Trabalhado</th>
-                                    <th class="px-4 py-3 font-bold text-blue-600 uppercase text-[10px] tracking-wider text-center">Balanço Extra</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Data</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Site</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Escala</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center">Feitas</th>
+                                    <th class="px-4 py-3 font-bold text-blue-600 uppercase text-[10px] text-center">Extra</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center" data-pdf-ignore="true">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody id="tbHoras" class="bg-white divide-y divide-slate-100">
-                                <tr><td colspan="5" class="p-6 text-center text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 block"></i> Conectando à base...</td></tr>
-                            </tbody>
+                            <tbody id="tbHoras" class="divide-y divide-slate-100"></tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- Tabela 2 -->
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[350px]">
-                    <div class="bg-slate-800 px-5 py-4 border-b border-slate-900">
-                        <h2 class="text-sm font-bold text-white uppercase"><i class="fa-solid fa-wallet text-emerald-400 mr-2"></i> Previsão Financeira</h2>
-                    </div>
+                <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
+                    <div class="bg-slate-800 px-5 py-3 border-b border-slate-900"><h2 class="text-sm font-bold text-white uppercase"><i class="fa-solid fa-wallet text-emerald-400 mr-2"></i> Previsão Financeira</h2></div>
                     <div class="overflow-auto custom-scrollbar flex-1 p-0">
-                        <table class="min-w-full divide-y divide-slate-200 text-sm text-left">
-                            <thead class="bg-slate-50 sticky top-0 z-10">
+                        <table class="min-w-full text-sm text-left" id="tableFinHtml">
+                            <thead class="bg-slate-50 sticky top-0">
                                 <tr>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Data</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider">Site</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-center">H.E (Qtd)</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] tracking-wider text-right">Taxa (R$/h)</th>
-                                    <th class="px-4 py-3 font-bold text-emerald-600 uppercase text-[10px] tracking-wider text-right">Provisão Diária</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Data</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Site</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center">H.E (h)</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-right">Taxa (R$)</th>
+                                    <th class="px-4 py-3 font-bold text-emerald-600 uppercase text-[10px] text-right">Provisão Diária</th>
                                 </tr>
                             </thead>
-                            <tbody id="tbFinanceiro" class="bg-white divide-y divide-slate-100">
-                            </tbody>
+                            <tbody id="tbFinanceiro" class="divide-y divide-slate-100"></tbody>
                         </table>
                     </div>
                 </div>
-
             </section>
         </main>
+    </div>
+
+    <!-- Modal Compartilhar -->
+    <div id="modalShare" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center fade-in">
+        <div class="bg-white p-6 rounded-xl shadow-xl w-96">
+            <h3 class="text-lg font-bold text-slate-800 mb-4"><i class="fa-solid fa-share-nodes text-blue-500 mr-2"></i> Compartilhar Registro</h3>
+            <p class="text-xs text-slate-500 mb-4">Selecione o colega que também participou desta viagem. O registro aparecerá no painel dele para ser aproveitado.</p>
+            <select id="shareUserSelect" class="w-full px-3 py-2 border rounded mb-4 text-sm bg-slate-50"><option value="">Carregando colegas...</option></select>
+            <input type="hidden" id="shareTripId">
+            <div class="flex justify-end gap-2">
+                <button onclick="fecharModalShare()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
+                <button onclick="confirmarShare()" id="btnConfirmShare" class="px-4 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded shadow">Enviar Registro</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
