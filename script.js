@@ -29,7 +29,9 @@ function toggleAuthView(view) {
 }
 
 async function fetchAPI(data, btnId, textId, msgId, originalText) {
-    const btn = document.getElementById(btnId); const textSpan = document.getElementById(textId); const msgDiv = document.getElementById(msgId);
+    const btn = btnId ? document.getElementById(btnId) : null; 
+    const textSpan = textId ? document.getElementById(textId) : null; 
+    const msgDiv = msgId ? document.getElementById(msgId) : null;
     if(btn) { btn.disabled = true; btn.classList.add('opacity-75', 'cursor-not-allowed'); textSpan.innerHTML = '<span class="loader"></span>'; }
     if(msgDiv) msgDiv.classList.add('hidden');
     try {
@@ -142,26 +144,20 @@ function abrirWorkspace(sigla, tipo) {
 
 function voltarParaProjetos() { currentProject = { sigla: '', tipo: '' }; showView('projectsView'); }
 
-// LÓGICA DE TURNOS (Baseada em Setembro de 2026 - Onde Didi é "Turno Estendido")
 function determinarEscala(equipe, dataViagemStr) {
     const d = new Date(dataViagemStr + "T00:00:00");
-    let cycleYear = d.getFullYear();
-    let cycleMonth = d.getMonth(); 
+    let cycleYear = d.getFullYear(); let cycleMonth = d.getMonth(); 
     if (d.getDate() < 21) { cycleMonth--; if (cycleMonth < 0) { cycleMonth = 11; cycleYear--; } }
-    
-    // O ciclo de Agosto/2026 (mês 7) coloca Didi no Estendido. (Mês 7 para Setembro ciclo par)
     let monthsPassed = (cycleYear - 2026) * 12 + (cycleMonth - 7);
     let isEvenCycle = (monthsPassed % 2 === 0);
-    
     if (equipe === "Didi") return isEvenCycle ? "Turno Estendido" : "Turno Padrão";
     return isEvenCycle ? "Turno Padrão" : "Turno Estendido";
 }
 
 function getMinutosPrevistos(escala, dStr) {
     const dia = new Date(dStr + "T00:00:00").getDay();
-    if (dia === 0) return 0; // Domingo
-    // Legado Horário 1 = Turno Padrão, Horário 2 = Turno Estendido
-    if (escala === "Turno Padrão" || escala === "Horário 1") return (dia <= 5) ? 480 : 240; 
+    if (dia === 0) return 0;
+    if (escala === "Turno Padrão") return (dia <= 5) ? 480 : 240; 
     return (dia <= 4) ? 540 : (dia === 5 ? 480 : 0); 
 }
 
@@ -209,6 +205,21 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     if(r && r.success) { cancelarEdicao(); carregarTudo(); setTimeout(() => document.getElementById(msgId).classList.add('hidden'), 3000); }
 });
 
+// Ações de Deleção
+async function deletarRegistro(idViagem) {
+    if(!confirm("Tem certeza que deseja excluir este registro permanentemente?")) return;
+    const payload = { action: 'deleteTrip', login: userData.login, idViagem: idViagem };
+    const r = await fetchAPI(payload, null, null, null, null);
+    if(r && r.success) { alert(r.message); carregarTudo(); } else if (r) { alert(r.message); }
+}
+
+async function deletarProjeto() {
+    if(!confirm(`ATENÇÃO: Você está prestes a excluir o projeto ${currentProject.sigla} e TODOS os apontamentos contidos nele.\nEsta ação não pode ser desfeita.\n\nDeseja continuar?`)) return;
+    const payload = { action: 'deleteProject', login: userData.login, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo };
+    const r = await fetchAPI(payload, null, null, null, null);
+    if(r && r.success) { alert(r.message); voltarParaProjetos(); carregarTudo(); } else if (r) { alert(r.message); }
+}
+
 function obterDiaSemana(dataString) {
     const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     return dias[new Date(dataString + "T00:00:00").getDay()];
@@ -233,9 +244,10 @@ function renderizarWorkspace() {
                     <td class="px-4 py-3 text-sm text-slate-600">${df}</td>
                     <td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td>
                     <td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${t.horasExtras}</td>
-                    <td class="px-4 py-3 text-center space-x-2" data-pdf-ignore="true">
-                        <button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="abrirModalShare('${t.idViagem}')" class="text-slate-400 hover:text-blue-500 transition"><i class="fa-solid fa-share-nodes"></i></button>
+                    <td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true">
+                        <button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar Lançamento"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="abrirModalShare('${t.idViagem}')" class="text-slate-400 hover:text-blue-500 transition" title="Compartilhar Lançamento"><i class="fa-solid fa-share-nodes"></i></button>
+                        <button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir Lançamento"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 </tr>`;
             
@@ -297,19 +309,17 @@ async function confirmarShare() {
 function gerarPDF() {
     const { jsPDF } = window.jspdf; const doc = new jsPDF();
     doc.setFontSize(16); 
-    // Título Exato solicitado
     doc.text(`Relatório de Viagens - ${currentProject.sigla} | ${userData.login}`, 14, 15);
     doc.setFontSize(10); 
     doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome} | Serviço: ${currentProject.tipo}`, 14, 22);
     
-    // Configurado para renderizar apenas a Tabela 1 (Registros de Atividades), ignorando a coluna de Ações (índice 3)
     doc.autoTable({ 
         html: '#tableHorasHtml', 
         startY: 30, 
         theme: 'grid', 
         styles: { fontSize: 8 }, 
         headStyles: { fillColor: [30, 41, 59] }, 
-        columns: [0, 1, 2] // Exporta apenas Data, Escala, e Horas Extras
+        columns: [0, 1, 2]
     });
     
     doc.save(`Relatorio_Viagens_${currentProject.sigla}_${userData.login}.pdf`);
