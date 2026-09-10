@@ -1,0 +1,35 @@
+/* Reseta conflitos básicos */
+button:focus, input:focus, select:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Cursor no campo de tempo */
+input[type="time"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+}
+
+/* Transições SPA */
+.fade-in { 
+    animation: fadeIn 0.4s ease-in-out; 
+}
+
+@keyframes fadeIn { 
+    from { opacity: 0; transform: translateY(-10px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+
+/* Loaders Unificados */
+.loader, .loader-small { 
+    border-radius: 50%; 
+    animation: spin 1s linear infinite; 
+    display: inline-block; 
+    vertical-align: middle; 
+}
+.loader { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; width: 20px; height: 20px; }
+.loader-small { border: 2px solid #f3f3f3; border-top: 2px solid #ffffff; width: 16px; height: 16px; }
+
+@keyframes spin { 
+    0% { transform: rotate(0deg); } 
+    100% { transform: rotate(360deg); } 
+}
