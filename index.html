@@ -104,13 +104,16 @@
 
     <!-- WORKSPACE DO PROJETO -->
     <div id="dashboardView" class="hidden min-h-screen container mx-auto p-4 py-6">
-        <div class="mb-6 flex justify-between items-end border-b border-slate-300 pb-4">
+        <div class="mb-6 flex flex-col md:flex-row justify-between md:items-end border-b border-slate-300 pb-4 gap-4">
             <div>
                 <button onclick="voltarParaProjetos()" class="text-blue-600 hover:text-blue-800 text-sm font-bold mb-2 flex items-center transition"><i class="fa-solid fa-arrow-left mr-1"></i> Voltar aos Projetos</button>
                 <h2 class="text-2xl font-bold text-slate-800 uppercase" id="workspaceTitle">PROJETO: LOJA XXX</h2>
                 <p class="text-sm text-slate-500 font-medium" id="workspaceSubtitle">Categoria: ...</p>
             </div>
-            <button onclick="gerarPDF()" class="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded font-bold shadow transition"><i class="fa-solid fa-file-pdf mr-2"></i> Exportar Relatório</button>
+            <div class="flex gap-2">
+                <button onclick="deletarProjeto()" class="bg-slate-700 hover:bg-slate-800 text-white text-sm px-4 py-2 rounded font-bold shadow transition"><i class="fa-solid fa-trash-can mr-2"></i> Excluir Projeto</button>
+                <button onclick="gerarPDF()" class="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded font-bold shadow transition"><i class="fa-solid fa-file-pdf mr-2"></i> Exportar Relatório</button>
+            </div>
         </div>
 
         <main class="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -141,7 +144,7 @@
                 <!-- Registros de Atividades -->
                 <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
                     <div class="bg-slate-50 px-5 py-3 border-b flex justify-between items-center">
-                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-list-check text-slate-500 mr-2"></i> Registros de Atividades</h2>
+                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-clipboard-list text-slate-500 mr-2"></i> Registros de Atividades</h2>
                     </div>
                     <div class="overflow-auto custom-scrollbar flex-1 p-0">
                         <table class="min-w-full text-sm text-left" id="tableHorasHtml">
@@ -174,7 +177,6 @@
                             <tbody id="tbFinanceiro" class="divide-y divide-slate-100"></tbody>
                         </table>
                     </div>
-                    <!-- Rodapé Escuro Identico ao Exemplo -->
                     <div class="bg-[#1e293b] px-6 py-4 flex justify-between items-center text-white">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Acumulado (Neste Projeto)</span>
                         <span class="text-xl font-bold text-emerald-400" id="valorTotalProjeto">R$ 0,00</span>
