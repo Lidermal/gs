@@ -63,18 +63,18 @@ async function fetchAPI(data, btnId, textId, msgId, originalText) {
         
         msgDiv.classList.remove('hidden');
         if(result.success) {
-            msgDiv.className = "text-center text-sm font-medium mt-2 text-green-600";
-            msgDiv.textContent = result.message || "Sucesso!";
+            msgDiv.className = "text-center text-sm font-semibold mt-3 text-emerald-500";
+            msgDiv.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i> ${result.message || "Sucesso!"}`;
             return result; 
         } else {
-            msgDiv.className = "text-center text-sm font-medium mt-2 text-red-500";
-            msgDiv.textContent = result.message;
+            msgDiv.className = "text-center text-sm font-semibold mt-3 text-red-500";
+            msgDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> ${result.message}`;
             return false;
         }
     } catch (error) {
         msgDiv.classList.remove('hidden');
-        msgDiv.className = "text-center text-sm font-medium mt-2 text-red-500";
-        msgDiv.textContent = "Erro de conexão.";
+        msgDiv.className = "text-center text-sm font-semibold mt-3 text-red-500";
+        msgDiv.innerHTML = `<i class="fa-solid fa-wifi mr-1"></i> Erro de conexão com o banco.`;
         return false;
     } finally {
         btn.disabled = false;
@@ -94,15 +94,16 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         senha: document.getElementById('regSenha').value
     };
 
-    const result = await fetchAPI(data, 'btnRegister', 'regText', 'regMsg', 'Cadastrar');
+    const originalHTML = '<i class="fa-solid fa-save mr-2"></i> Criar Credencial';
+    const result = await fetchAPI(data, 'btnRegister', 'regText', 'regMsg', originalHTML);
     
     if(result) {
         document.getElementById('registerForm').reset();
-        document.getElementById('regMsg').innerHTML = `Cadastro realizado!<br>Seu login é: <b>${result.login}</b>`;
+        document.getElementById('regMsg').innerHTML = `<i class="fa-solid fa-check"></i> Credencial gerada!<br>Seu usuário (login) é: <b class="text-slate-800">${result.login}</b>`;
         setTimeout(() => {
             document.getElementById('loginUser').value = result.login;
             toggleAuthView('login');
-        }, 3000);
+        }, 4000);
     }
 });
 
@@ -114,20 +115,21 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         senha: document.getElementById('loginSenha').value
     };
 
-    const result = await fetchAPI(data, 'btnLogin', 'loginText', 'loginMsg', 'Entrar');
+    const originalHTML = 'Acessar Sistema <i class="fa-solid fa-arrow-right-to-bracket ml-2"></i>';
+    const result = await fetchAPI(data, 'btnLogin', 'loginText', 'loginMsg', originalHTML);
     
     if(result) {
         localStorage.setItem('usuarioAtivo', JSON.stringify(result.user));
         userData = result.user; 
-        document.getElementById('loginMsg').className = "text-center text-sm font-medium mt-2 text-green-600";
-        document.getElementById('loginMsg').textContent = "Acessando...";
+        document.getElementById('loginMsg').className = "text-center text-sm font-semibold mt-3 text-blue-600";
+        document.getElementById('loginMsg').innerHTML = "<i class="fa-solid fa-spinner fa-spin mr-1"></i> Carregando workspace...";
         
         setTimeout(() => {
             showView('dashboardView');
             initDashboard();
             document.getElementById('loginForm').reset();
             document.getElementById('loginMsg').classList.add('hidden');
-        }, 1000);
+        }, 1200);
     }
 });
 
@@ -136,8 +138,7 @@ function logout() {
     userData = null;
     showView('authView');
     
-    // Limpa a tabela para não mostrar dados vazados quando voltar pro login
-    document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-4 text-center">Aguardando login...</td></tr>';
+    document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-6 text-center text-slate-400">Desconectado.</td></tr>';
     document.getElementById('tbFinanceiro').innerHTML = '';
 }
 
@@ -145,7 +146,9 @@ function logout() {
 // MÓDULO 2: LÓGICA DO DASHBOARD E ESCALAS
 // ==========================================
 function initDashboard() {
-    document.getElementById('userGreeting').textContent = `Olá, ${userData.nome} | ${userData.equipe} | ${userData.nivel}`;
+    // Atualiza a Header
+    document.getElementById('navUserName').textContent = `${userData.nome} ${userData.sobrenome}`;
+    document.getElementById('navUserRole').textContent = `Equipe ${userData.equipe} • ${userData.nivel}`;
     carregarRelatorios();
 }
 
@@ -154,7 +157,6 @@ function determinarEscala(equipe, dataViagemStr) {
     const ano = dataViagem.getFullYear();
     const mes = dataViagem.getMonth();
     
-    // Lógica de virada de mês a partir de 21/09/2026
     let mesesDiferenca = (ano - 2026) * 12 + (mes - 8);
     if (dataViagem.getDate() < 21) mesesDiferenca -= 1;
     let isDidiHorario2 = (mesesDiferenca % 2 === 0);
@@ -241,24 +243,24 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
         
         msg.classList.remove('hidden');
         if(result.success) {
-            msg.className = "text-center text-sm font-medium mt-2 text-green-600";
-            msg.textContent = result.message;
+            msg.className = "text-center text-xs font-bold mt-3 text-emerald-600 bg-emerald-50 py-2 rounded border border-emerald-100";
+            msg.innerHTML = `<i class="fa-solid fa-check-double mr-1"></i> ${result.message}`;
             document.getElementById('tripForm').reset();
             carregarRelatorios(); 
         }
     } catch (err) {
         msg.classList.remove('hidden');
-        msg.className = "text-center text-sm font-medium mt-2 text-red-500";
-        msg.textContent = "Erro ao salvar.";
+        msg.className = "text-center text-xs font-bold mt-3 text-red-600 bg-red-50 py-2 rounded border border-red-100";
+        msg.innerHTML = `<i class="fa-solid fa-bug mr-1"></i> Falha ao sincronizar.`;
     } finally {
         btn.disabled = false;
-        document.getElementById('btnSalvarTexto').textContent = 'Salvar Registro';
-        setTimeout(() => msg.classList.add('hidden'), 3000);
+        document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar no Banco';
+        setTimeout(() => msg.classList.add('hidden'), 4000);
     }
 });
 
 async function carregarRelatorios() {
-    document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-4 text-center"><span class="loader-small border-slate-600 border-top-transparent"></span> Carregando dados...</td></tr>';
+    document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400"><i class="fa-solid fa-server fa-bounce text-2xl mb-2 block"></i> Buscando instâncias...</td></tr>';
     
     try {
         const resp = await fetch(API_URL, {
@@ -276,31 +278,35 @@ async function carregarRelatorios() {
             result.trips.reverse().forEach(trip => {
                 const dateParts = trip.data.split('T')[0].split('-');
                 const dataFormatada = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+                
+                // Formatação visual condicional (se não tem hora extra, fica cinza)
+                const hasExtra = trip.horasExtras !== '00:00';
+                const extraColorClass = hasExtra ? 'text-blue-600 bg-blue-50 px-2 py-1 rounded-md' : 'text-slate-400';
+                const finColorClass = Number(trip.totalReceber) > 0 ? 'text-emerald-600 font-bold' : 'text-slate-400';
 
                 tbHoras.innerHTML += `
-                    <tr class="border-b hover:bg-slate-50">
-                        <td class="p-2">${dataFormatada}</td>
-                        <td class="p-2 font-bold">${trip.sigla}</td>
-                        <td class="p-2 text-xs text-slate-500">${trip.escala}</td>
-                        <td class="p-2 text-center">${trip.totalHoras}</td>
-                        <td class="p-2 text-center font-bold text-blue-600">${trip.horasExtras}</td>
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600"><i class="fa-regular fa-calendar text-slate-400 mr-1"></i> ${dataFormatada}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-slate-800">${trip.sigla}</td>
+                        <td class="px-4 py-3 whitespace-nowrap"><span class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded text-xs border border-slate-200 font-medium">${trip.escala}</span></td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-center text-slate-700 font-mono">${trip.totalHoras}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-bold ${hasExtra ? 'text-blue-600' : 'text-slate-400'}"><span class="${hasExtra ? 'bg-blue-50 px-2 py-1 rounded-md border border-blue-100' : ''}">${trip.horasExtras}</span></td>
                     </tr>`;
                 
                 tbFin.innerHTML += `
-                    <tr class="border-b hover:bg-slate-50">
-                        <td class="p-2">${dataFormatada}</td>
-                        <td class="p-2 font-bold">${trip.sigla}</td>
-                        <td class="p-2 text-center">${trip.horasExtras}</td>
-                        <td class="p-2 text-right">R$ ${Number(trip.valorHoraExtra).toFixed(2).replace('.', ',')}</td>
-                        <td class="p-2 text-right font-bold text-green-600">R$ ${Number(trip.totalReceber).toFixed(2).replace('.', ',')}</td>
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-slate-600">${dataFormatada}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-slate-800">${trip.sigla}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-center font-mono text-slate-600">${trip.horasExtras}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-right text-slate-500">R$ ${Number(trip.valorHoraExtra).toFixed(2).replace('.', ',')}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-right ${finColorClass}">R$ ${Number(trip.totalReceber).toFixed(2).replace('.', ',')}</td>
                     </tr>`;
             });
         } else {
-            tbHoras.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Nenhuma viagem registrada.</td></tr>';
-            tbFin.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Nenhuma viagem registrada.</td></tr>';
+            tbHoras.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400"><i class="fa-solid fa-folder-open text-3xl mb-2 block text-slate-300"></i> Nenhum registro localizado.</td></tr>';
+            tbFin.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400"><i class="fa-solid fa-wallet text-3xl mb-2 block text-slate-300"></i> Nenhuma movimentação financeira.</td></tr>';
         }
     } catch (err) {
-        console.error("Erro ao carregar viagens", err);
-        document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-4 text-center text-red-500">Erro ao buscar dados.</td></tr>';
+        document.getElementById('tbHoras').innerHTML = '<tr><td colspan="5" class="p-6 text-center text-red-500"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Erro de sincronização.</td></tr>';
     }
 }
