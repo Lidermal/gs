@@ -724,7 +724,6 @@ function gerarPDF() {
     
     let minRegulares = 0;
     let minDomingoReal = 0;
-    let minDomingoDobrado = 0;
     
     const tableData = projTrips.map(t => {
         const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
@@ -738,7 +737,6 @@ function gerarPDF() {
         if (diaSemanaInt === 0) {
             horasParaTabela = halveTime(t.horasExtras);
             minDomingoReal += timeToMins(horasParaTabela);
-            minDomingoDobrado += minsExtraCalculo;
         } else {
             minRegulares += minsExtraCalculo;
         }
@@ -768,7 +766,7 @@ function gerarPDF() {
     
     // Cálculos da Tabela Secundária
     const totalMinsExtras = minRegulares + minDomingoReal;
-    const totalMinsSomadas = minRegulares + minDomingoDobrado;
+    const totalMinsSomadas = totalMinsExtras + minDomingoReal; // Regra exata: Total Horas Extras + Total Horas Domingo
 
     const summaryData = [
         ['TOTAL HORAS REGULARES', minsToTime(minRegulares)],
