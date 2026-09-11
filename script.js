@@ -715,7 +715,7 @@ function gerarPDF() {
     
     doc.setFontSize(10); 
     doc.setTextColor(71, 85, 105);
-    doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome} | Login: ${userData.login}`, 14, 22);
+    doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome}`, 14, 22);
     doc.text(`Serviço: ${currentProject.tipo} | Equipe: ${userData.equipe} | Nível: ${userData.nivel}`, 14, 28);
     
     // Preparar dados para a tabela ordenados por data crescente
