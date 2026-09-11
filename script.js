@@ -406,7 +406,6 @@ function minsToTime(m) {
     return `${m<0?"-":""}${String(Math.floor(Math.abs(m)/60)).padStart(2,'0')}:${String(Math.floor(Math.abs(m)%60)).padStart(2,'0')}`; 
 }
 
-// Helper para converter o valor dobrado do Domingo de volta para Real (visualmente)
 function halveTime(timeStr) {
     if (!timeStr || timeStr === "00:00") return "00:00";
     let mins = timeToMins(timeStr);
@@ -454,7 +453,6 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     let mExt = minsTrab - getMinutosPrevistos(escA, dV); 
     if (mExt < 0) mExt = 0;
     
-    // Matemática: Domingo 100% dobrado pro BD
     if (diaSemana === 0) mExt = mExt * 2; 
     
     const vHora = valoresHora[userData.nivel] || 0;
@@ -553,7 +551,6 @@ function renderizarWorkspace() {
             const diaSemanaInt = new Date(dateStr + "T00:00:00").getDay();
             const df = dateStr.split('-').reverse().join('/') + ` (${obterDiaSemana(dateStr)})`;
             
-            // Lógica de exibição visual da hora (Domingo mostra hora real)
             let horasExibicaoAtividades = t.horasExtras;
             if (diaSemanaInt === 0) {
                 horasExibicaoAtividades = halveTime(t.horasExtras);
@@ -573,7 +570,6 @@ function renderizarWorkspace() {
                     </td>
                 </tr>`;
             
-            // Previsão Financeira (Mostra a hora faturada do BD)
             tbF.innerHTML += `
                 <tr class="hover:bg-slate-50 border-b transition-colors">
                     <td class="px-4 py-3 text-sm text-slate-600">${df}</td>
@@ -707,7 +703,7 @@ async function confirmarShare() {
     showToast('Projeto compartilhado com sucesso!', 'success', 'Compartilhado');
 }
 
-// ===== FUNÇÃO GERAR PDF ATUALIZADA (TABELA DETALHADA E RESUMO FINANCEIRO) =====
+// ===== FUNÇÃO GERAR PDF ATUALIZADA =====
 function gerarPDF() {
     const { jsPDF } = window.jspdf; 
     const doc = new jsPDF();
@@ -727,10 +723,8 @@ function gerarPDF() {
     projTrips.sort((a, b) => new Date(a.data) - new Date(b.data));
     
     let minRegulares = 0;
-    let valRegulares = 0;
     let minDomingoReal = 0;
     let minDomingoDobrado = 0;
-    let valDomingo = 0;
     
     const tableData = projTrips.map(t => {
         const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
@@ -740,18 +734,13 @@ function gerarPDF() {
         
         let horasParaTabela = t.horasExtras;
         let minsExtraCalculo = timeToMins(t.horasExtras);
-        let valorFinanceiro = Number(t.totalReceber);
         
-        // Verifica se é domingo para atualizar tabela real e cálculos
         if (diaSemanaInt === 0) {
             horasParaTabela = halveTime(t.horasExtras);
-            let minsReal = timeToMins(horasParaTabela);
-            minDomingoReal += minsReal;
+            minDomingoReal += timeToMins(horasParaTabela);
             minDomingoDobrado += minsExtraCalculo;
-            valDomingo += valorFinanceiro;
         } else {
             minRegulares += minsExtraCalculo;
-            valRegulares += valorFinanceiro;
         }
         
         return [
@@ -761,7 +750,7 @@ function gerarPDF() {
         ];
     });
     
-    // Gerar tabela Principal (Log de Horas Reais)
+    // Gerar tabela Principal
     doc.autoTable({
         startY: 35,
         head: [['Data', 'Horários (Entrada - Pausa / Retorno - Saída)', 'Horas Extras']],
@@ -777,30 +766,28 @@ function gerarPDF() {
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
-    // Tabela Secundária (Resumo Financeiro)
-    const totalMinsReal = minRegulares + minDomingoReal;
+    // Cálculos da Tabela Secundária
+    const totalMinsExtras = minRegulares + minDomingoReal;
     const totalMinsSomadas = minRegulares + minDomingoDobrado;
-    const valTotalGeral = valRegulares + valDomingo;
 
     const summaryData = [
-        ['Horas Regulares', minsToTime(minRegulares), `R$ ${valRegulares.toFixed(2).replace('.', ',')}`],
-        ['Domingos Trabalhados (Horas Reais)', minsToTime(minDomingoReal), `R$ ${valDomingo.toFixed(2).replace('.', ',')}`],
-        ['Total de Horas Extras (Reais)', minsToTime(totalMinsReal), '-'],
-        ['Total Faturado (Com Domingos Dobrados)', minsToTime(totalMinsSomadas), `R$ ${valTotalGeral.toFixed(2).replace('.', ',')}`]
+        ['TOTAL HORAS REGULARES', minsToTime(minRegulares)],
+        ['TOTAL HORAS DOMINGO', minsToTime(minDomingoReal)],
+        ['TOTAL HORAS EXTRAS', minsToTime(totalMinsExtras)],
+        ['TOTAL HORAS SOMADAS', minsToTime(totalMinsSomadas)]
     ];
 
+    // Tabela Secundária (Menor, no lado direito, sem valores)
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 10,
-        head: [['Resumo Financeiro (Categoria)', 'Tempo', 'Valor']],
         body: summaryData,
         theme: 'grid',
         styles: { fontSize: 9, cellPadding: 4, lineColor: [203, 213, 225], lineWidth: 0.1 },
-        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
         columnStyles: {
-            0: { fontStyle: 'bold' },
-            1: { halign: 'center', font: 'courier' },
-            2: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129] }
-        }
+            0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 55 },
+            1: { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [37, 99, 235], cellWidth: 20 }
+        },
+        margin: { left: 121, right: 14 } // Empurra a tabela exatamente para o lado direito abaixo da tabela principal
     });
     
     // Rodapé
