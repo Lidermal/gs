@@ -53,7 +53,7 @@ function showConfirm(message, options = {}) {
             title = 'Confirmar Ação',
             confirmText = 'Confirmar',
             cancelText = 'Cancelar',
-            type = 'warning', // warning, danger, info
+            type = 'warning', 
             icon = 'fa-question'
         } = options;
         
@@ -397,12 +397,20 @@ function getMinutosPrevistos(escala, dStr) {
 }
 
 function timeToMins(t) { 
+    if (!t) return 0;
     const [h, m] = t.split(':').map(Number); 
     return h * 60 + m; 
 }
 
 function minsToTime(m) { 
     return `${m<0?"-":""}${String(Math.floor(Math.abs(m)/60)).padStart(2,'0')}:${String(Math.floor(Math.abs(m)%60)).padStart(2,'0')}`; 
+}
+
+// Helper para converter o valor dobrado do Domingo de volta para Real (visualmente)
+function halveTime(timeStr) {
+    if (!timeStr || timeStr === "00:00") return "00:00";
+    let mins = timeToMins(timeStr);
+    return minsToTime(mins / 2);
 }
 
 function cancelarEdicao() {
@@ -445,7 +453,10 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     
     let mExt = minsTrab - getMinutosPrevistos(escA, dV); 
     if (mExt < 0) mExt = 0;
+    
+    // Matemática: Domingo 100% dobrado pro BD
     if (diaSemana === 0) mExt = mExt * 2; 
+    
     const vHora = valoresHora[userData.nivel] || 0;
     
     const payload = { 
@@ -539,20 +550,30 @@ function renderizarWorkspace() {
         projTrips.sort((a, b) => new Date(b.data) - new Date(a.data));
         projTrips.forEach(t => {
             const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
+            const diaSemanaInt = new Date(dateStr + "T00:00:00").getDay();
             const df = dateStr.split('-').reverse().join('/') + ` (${obterDiaSemana(dateStr)})`;
-            const hExt = t.horasExtras !== '00:00';
+            
+            // Lógica de exibição visual da hora (Domingo mostra hora real)
+            let horasExibicaoAtividades = t.horasExtras;
+            if (diaSemanaInt === 0) {
+                horasExibicaoAtividades = halveTime(t.horasExtras);
+            }
+            const hExt = horasExibicaoAtividades !== '00:00';
+            
             valorTotal += Number(t.totalReceber);
 
             tbH.innerHTML += `
                 <tr class="hover:bg-slate-50 border-b transition-colors">
                     <td class="px-4 py-3 text-sm text-slate-600">${df}</td>
                     <td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td>
-                    <td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${t.horasExtras}</td>
+                    <td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td>
                     <td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true">
                         <button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button>
                         <button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 </tr>`;
+            
+            // Previsão Financeira (Mostra a hora faturada do BD)
             tbF.innerHTML += `
                 <tr class="hover:bg-slate-50 border-b transition-colors">
                     <td class="px-4 py-3 text-sm text-slate-600">${df}</td>
@@ -686,7 +707,7 @@ async function confirmarShare() {
     showToast('Projeto compartilhado com sucesso!', 'success', 'Compartilhado');
 }
 
-// ===== FUNÇÃO GERAR PDF ATUALIZADA (SEM VALORES) =====
+// ===== FUNÇÃO GERAR PDF ATUALIZADA (TABELA DETALHADA E RESUMO FINANCEIRO) =====
 function gerarPDF() {
     const { jsPDF } = window.jspdf; 
     const doc = new jsPDF();
@@ -701,47 +722,84 @@ function gerarPDF() {
     doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome} | Login: ${userData.login}`, 14, 22);
     doc.text(`Serviço: ${currentProject.tipo} | Equipe: ${userData.equipe} | Nível: ${userData.nivel}`, 14, 28);
     
-    // Preparar dados para a tabela
+    // Preparar dados para a tabela ordenados por data crescente
     const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
-    projTrips.sort((a, b) => new Date(b.data) - new Date(a.data));
+    projTrips.sort((a, b) => new Date(a.data) - new Date(b.data));
+    
+    let minRegulares = 0;
+    let valRegulares = 0;
+    let minDomingoReal = 0;
+    let minDomingoDobrado = 0;
+    let valDomingo = 0;
     
     const tableData = projTrips.map(t => {
         const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
         const df = dateStr.split('-').reverse().join('/');
-        const diaSemana = obterDiaSemana(dateStr);
+        const diaSemanaInt = new Date(dateStr + "T00:00:00").getDay();
+        const diaSemanaStr = obterDiaSemana(dateStr);
+        
+        let horasParaTabela = t.horasExtras;
+        let minsExtraCalculo = timeToMins(t.horasExtras);
+        let valorFinanceiro = Number(t.totalReceber);
+        
+        // Verifica se é domingo para atualizar tabela real e cálculos
+        if (diaSemanaInt === 0) {
+            horasParaTabela = halveTime(t.horasExtras);
+            let minsReal = timeToMins(horasParaTabela);
+            minDomingoReal += minsReal;
+            minDomingoDobrado += minsExtraCalculo;
+            valDomingo += valorFinanceiro;
+        } else {
+            minRegulares += minsExtraCalculo;
+            valRegulares += valorFinanceiro;
+        }
         
         return [
-            `${df} (${diaSemana})`,
+            `${df} (${diaSemanaStr})`,
             `${t.entrada} - ${t.inicioAlmoco} / ${t.fimAlmoco} - ${t.saida}`,
-            t.horasExtras
+            horasParaTabela
         ];
     });
     
-    // Gerar tabela com colunas personalizadas (SEM VALOR)
+    // Gerar tabela Principal (Log de Horas Reais)
     doc.autoTable({
         startY: 35,
         head: [['Data', 'Horários (Entrada - Pausa / Retorno - Saída)', 'Horas Extras']],
         body: tableData,
         theme: 'grid',
-        styles: { 
-            fontSize: 9,
-            cellPadding: 4,
-            lineColor: [203, 213, 225],
-            lineWidth: 0.1
-        },
-        headStyles: { 
-            fillColor: [30, 41, 59],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            fontSize: 10
-        },
+        styles: { fontSize: 9, cellPadding: 4, lineColor: [203, 213, 225], lineWidth: 0.1 },
+        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
         columnStyles: {
             0: { cellWidth: 45, halign: 'center' },
             1: { cellWidth: 100, halign: 'center', font: 'courier' },
             2: { cellWidth: 35, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] }
         },
-        alternateRowStyles: {
-            fillColor: [248, 250, 252]
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+    
+    // Tabela Secundária (Resumo Financeiro)
+    const totalMinsReal = minRegulares + minDomingoReal;
+    const totalMinsSomadas = minRegulares + minDomingoDobrado;
+    const valTotalGeral = valRegulares + valDomingo;
+
+    const summaryData = [
+        ['Horas Regulares', minsToTime(minRegulares), `R$ ${valRegulares.toFixed(2).replace('.', ',')}`],
+        ['Domingos Trabalhados (Horas Reais)', minsToTime(minDomingoReal), `R$ ${valDomingo.toFixed(2).replace('.', ',')}`],
+        ['Total de Horas Extras (Reais)', minsToTime(totalMinsReal), '-'],
+        ['Total Faturado (Com Domingos Dobrados)', minsToTime(totalMinsSomadas), `R$ ${valTotalGeral.toFixed(2).replace('.', ',')}`]
+    ];
+
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 10,
+        head: [['Resumo Financeiro (Categoria)', 'Tempo', 'Valor']],
+        body: summaryData,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 4, lineColor: [203, 213, 225], lineWidth: 0.1 },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+        columnStyles: {
+            0: { fontStyle: 'bold' },
+            1: { halign: 'center', font: 'courier' },
+            2: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129] }
         }
     });
     
