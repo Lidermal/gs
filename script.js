@@ -5,6 +5,31 @@ let userData = null;
 let allTrips = [];
 let currentProject = { sigla: '', tipo: '' };
 
+// ===== SISTEMA DE MÁSCARA E VALIDAÇÃO DE HORA 24h =====
+function mascaraHora(input) {
+    let v = input.value.replace(/\D/g, ''); // Remove tudo que não for número
+    if (v.length >= 3) {
+        v = v.substring(0, 2) + ':' + v.substring(2, 4);
+    }
+    input.value = v;
+}
+
+function validarHora(input) {
+    if (!input.value) return;
+    
+    // Auto formatar se esquecer dos zeros (ex: '900' ou '090')
+    if (input.value.length === 4 && !input.value.includes(':')) {
+        input.value = input.value.substring(0,2) + ':' + input.value.substring(2,4);
+    }
+    
+    // Validar hora 24h
+    const regex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!regex.test(input.value)) {
+        showToast('Formato inválido! Use o padrão 24h (Ex: 14:30)', 'warning', 'Atenção');
+        input.value = '';
+    }
+}
+
 // ===== SISTEMA DE TOASTS PERSONALIZADOS =====
 function showToast(message, type = 'info', title = null, duration = 4000) {
     const container = document.getElementById('toastContainer');
@@ -426,8 +451,8 @@ function carregarParaEdicao(idTrip) {
     document.getElementById('editTripId').value = t.idViagem; 
     document.getElementById('dataTrabalho').value = t.data.split('T')[0];
     document.getElementById('hrEntrada').value = t.entrada; 
-    document.getElementById('hrInicioAlmoco').value = t.inicioAlmoco;
-    document.getElementById('hrFimAlmoco').value = t.fimAlmoco; 
+    document.getElementById('hrInicioAlmoco').value = t.inicioAlmoco || "";
+    document.getElementById('hrFimAlmoco').value = t.fimAlmoco || ""; 
     document.getElementById('hrSaida').value = t.saida;
     document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento';
     document.getElementById('btnSalvar').classList.replace('bg-blue-600', 'bg-orange-500');
@@ -446,8 +471,20 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     document.getElementById('btnSalvarTexto').innerHTML = '<span class="loader-small"></span> Aguarde...';
     
     const dV = document.getElementById('dataTrabalho').value;
+    const hrEntrada = document.getElementById('hrEntrada').value;
+    const hrSaida = document.getElementById('hrSaida').value;
+    const hrInicioAlmoco = document.getElementById('hrInicioAlmoco').value;
+    const hrFimAlmoco = document.getElementById('hrFimAlmoco').value;
+
+    let minsTrab = 0;
+    // Verifica se os campos de pausa foram informados
+    if (hrInicioAlmoco && hrFimAlmoco) {
+        minsTrab = (timeToMins(hrInicioAlmoco) - timeToMins(hrEntrada)) + (timeToMins(hrSaida) - timeToMins(hrFimAlmoco));
+    } else {
+        minsTrab = timeToMins(hrSaida) - timeToMins(hrEntrada);
+    }
+
     const diaSemana = new Date(dV + "T00:00:00").getDay(); 
-    const minsTrab = (timeToMins(document.getElementById('hrInicioAlmoco').value) - timeToMins(document.getElementById('hrEntrada').value)) + (timeToMins(document.getElementById('hrSaida').value) - timeToMins(document.getElementById('hrFimAlmoco').value));
     const escA = determinarEscala(userData.equipe, dV);
     
     let mExt = minsTrab - getMinutosPrevistos(escA, dV); 
@@ -465,10 +502,10 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
         tipoProjeto: currentProject.tipo, 
         data: dV, 
         escala: escA, 
-        entrada: document.getElementById('hrEntrada').value, 
-        inicioAlmoco: document.getElementById('hrInicioAlmoco').value, 
-        fimAlmoco: document.getElementById('hrFimAlmoco').value, 
-        saida: document.getElementById('hrSaida').value, 
+        entrada: hrEntrada, 
+        inicioAlmoco: hrInicioAlmoco || "", 
+        fimAlmoco: hrFimAlmoco || "", 
+        saida: hrSaida, 
         totalHoras: minsToTime(minsTrab), 
         horasExtras: minsToTime(mExt), 
         valorHoraExtra: vHora, 
@@ -628,7 +665,13 @@ async function usarSharedProject(sharedData) {
 
     const novasViagensRecalculadas = sharedData.trips.map(trip => {
         const dV = trip.data.includes('T') ? trip.data.split('T')[0] : trip.data;
-        const minsTrab = (timeToMins(trip.inicioAlmoco) - timeToMins(trip.entrada)) + (timeToMins(trip.saida) - timeToMins(trip.fimAlmoco));
+        
+        let minsTrab = 0;
+        if (trip.inicioAlmoco && trip.fimAlmoco && trip.inicioAlmoco !== "00:00" && trip.fimAlmoco !== "00:00") {
+            minsTrab = (timeToMins(trip.inicioAlmoco) - timeToMins(trip.entrada)) + (timeToMins(trip.saida) - timeToMins(trip.fimAlmoco));
+        } else {
+            minsTrab = timeToMins(trip.saida) - timeToMins(trip.entrada);
+        }
         
         const escA = determinarEscala(userData.equipe, dV);
         let mExt = minsTrab - getMinutosPrevistos(escA, dV); 
@@ -643,8 +686,8 @@ async function usarSharedProject(sharedData) {
             data: dV, 
             escala: escA, 
             entrada: trip.entrada, 
-            inicioAlmoco: trip.inicioAlmoco, 
-            fimAlmoco: trip.fimAlmoco, 
+            inicioAlmoco: trip.inicioAlmoco || "", 
+            fimAlmoco: trip.fimAlmoco || "", 
             saida: trip.saida, 
             totalHoras: minsToTime(minsTrab), 
             horasExtras: minsToTime(mExt), 
@@ -708,7 +751,6 @@ function gerarPDF() {
     const { jsPDF } = window.jspdf; 
     const doc = new jsPDF();
     
-    // Cabeçalho do PDF
     doc.setFontSize(16); 
     doc.setTextColor(30, 41, 59);
     doc.text(`Relatório de Viagens - ${currentProject.sigla}`, 14, 15);
@@ -718,7 +760,6 @@ function gerarPDF() {
     doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome}`, 14, 22);
     doc.text(`Serviço: ${currentProject.tipo} | Equipe: ${userData.equipe} | Nível: ${userData.nivel}`, 14, 28);
     
-    // Preparar dados para a tabela ordenados por data crescente
     const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
     projTrips.sort((a, b) => new Date(a.data) - new Date(b.data));
     
@@ -741,14 +782,17 @@ function gerarPDF() {
             minRegulares += minsExtraCalculo;
         }
         
+        // Ajuste de texto para quando não houve pausa inserida
+        const pausaTexto = (t.inicioAlmoco && t.fimAlmoco) ? `${t.inicioAlmoco} / ${t.fimAlmoco}` : 'Sem Pausa';
+        const horariosString = `${t.entrada} - ${pausaTexto} - ${t.saida}`;
+        
         return [
             `${df} (${diaSemanaStr})`,
-            `${t.entrada} - ${t.inicioAlmoco} / ${t.fimAlmoco} - ${t.saida}`,
+            horariosString,
             horasParaTabela
         ];
     });
     
-    // Gerar tabela Principal
     doc.autoTable({
         startY: 35,
         head: [['Data', 'Horários (Entrada - Pausa / Retorno - Saída)', 'Horas Extras']],
@@ -764,9 +808,8 @@ function gerarPDF() {
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
-    // Cálculos da Tabela Secundária
     const totalMinsExtras = minRegulares + minDomingoReal;
-    const totalMinsSomadas = totalMinsExtras + minDomingoReal; // Regra exata: Total Horas Extras + Total Horas Domingo
+    const totalMinsSomadas = totalMinsExtras + minDomingoReal;
 
     const summaryData = [
         ['TOTAL HORAS REGULARES', minsToTime(minRegulares)],
@@ -775,7 +818,6 @@ function gerarPDF() {
         ['TOTAL HORAS SOMADAS', minsToTime(totalMinsSomadas)]
     ];
 
-    // Tabela Secundária (Menor, no lado direito, sem valores)
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 10,
         body: summaryData,
@@ -785,10 +827,9 @@ function gerarPDF() {
             0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 55 },
             1: { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [37, 99, 235], cellWidth: 20 }
         },
-        margin: { left: 121, right: 14 } // Empurra a tabela exatamente para o lado direito abaixo da tabela principal
+        margin: { left: 121, right: 14 }
     });
     
-    // Rodapé
     const pageCount = doc.internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
