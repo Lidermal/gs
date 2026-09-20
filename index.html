@@ -142,10 +142,11 @@
                         
                         <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50 border-slate-300">
                         <div class="bg-slate-100 p-4 rounded-lg border border-slate-200 grid grid-cols-2 gap-3">
-                            <div><label class="block text-[10px] font-bold text-slate-500">ENTRADA</label><input type="time" id="hrEntrada" required class="w-full px-2 py-1.5 border rounded font-mono text-sm bg-white"></div>
-                            <div><label class="block text-[10px] font-bold text-orange-600">INÍCIO PAUSA</label><input type="time" id="hrInicioAlmoco" required class="w-full px-2 py-1.5 border rounded font-mono text-sm bg-white"></div>
-                            <div><label class="block text-[10px] font-bold text-orange-600">FIM PAUSA</label><input type="time" id="hrFimAlmoco" required class="w-full px-2 py-1.5 border rounded font-mono text-sm bg-white"></div>
-                            <div><label class="block text-[10px] font-bold text-slate-500">SAÍDA</label><input type="time" id="hrSaida" required class="w-full px-2 py-1.5 border rounded font-mono text-sm bg-white"></div>
+                            <!-- MODIFICAÇÃO: type="text" com inputmode, máscara forçada de hora e pausa opcional -->
+                            <div><label class="block text-[10px] font-bold text-slate-500">ENTRADA</label><input type="text" id="hrEntrada" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" required class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
+                            <div><label class="block text-[10px] font-bold text-orange-600">INÍCIO PAUSA (Opc)</label><input type="text" id="hrInicioAlmoco" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
+                            <div><label class="block text-[10px] font-bold text-orange-600">FIM PAUSA (Opc)</label><input type="text" id="hrFimAlmoco" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
+                            <div><label class="block text-[10px] font-bold text-slate-500">SAÍDA</label><input type="text" id="hrSaida" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" required class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
                         </div>
                         <button type="submit" id="btnSalvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded transition"><span id="btnSalvarTexto"><i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento</span></button>
                         <div id="msgSalvar" class="text-center text-sm hidden"></div>
