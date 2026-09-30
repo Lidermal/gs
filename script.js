@@ -808,14 +808,13 @@ function gerarPDF() {
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
     
+    // REMOVIDO: totalMinsSomadas e a linha TOTAL HORAS SOMADAS
     const totalMinsExtras = minRegulares + minDomingoReal;
-    const totalMinsSomadas = totalMinsExtras + minDomingoReal;
 
     const summaryData = [
         ['TOTAL HORAS REGULARES', minsToTime(minRegulares)],
         ['TOTAL HORAS DOMINGO', minsToTime(minDomingoReal)],
-        ['TOTAL HORAS EXTRAS', minsToTime(totalMinsExtras)],
-        ['TOTAL HORAS SOMADAS', minsToTime(totalMinsSomadas)]
+        ['TOTAL HORAS EXTRAS', minsToTime(totalMinsExtras)]
     ];
 
     doc.autoTable({
