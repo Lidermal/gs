@@ -11,7 +11,63 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
-    <link rel="stylesheet" href="style.css">
+    <!-- Estilos CSS integrados para garantir funcionamento -->
+    <style>
+        /* Scrollbar Personalizada */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Animações */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+
+        /* Loader */
+        .loader { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s linear infinite; }
+        .loader-small { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s linear infinite; margin-right: 6px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Toast Notifications */
+        #toastContainer { position: fixed; top: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 10px; }
+        .toast { background: white; border-left: 4px solid; padding: 16px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 12px; min-width: 300px; animation: slideInRight 0.3s ease-out; transition: all 0.3s; }
+        .toast-success { border-color: #10b981; }
+        .toast-error { border-color: #ef4444; }
+        .toast-warning { border-color: #f59e0b; }
+        .toast-info { border-color: #3b82f6; }
+        .toast.hiding { opacity: 0; transform: translateX(100%); }
+        .toast-icon { font-size: 1.2rem; }
+        .toast-success .toast-icon { color: #10b981; }
+        .toast-error .toast-icon { color: #ef4444; }
+        .toast-warning .toast-icon { color: #f59e0b; }
+        .toast-info .toast-icon { color: #3b82f6; }
+        .toast-content { flex: 1; }
+        .toast-title { font-weight: bold; font-size: 0.875rem; color: #1e293b; }
+        .toast-message { font-size: 0.875rem; color: #64748b; margin-top: 2px; }
+        .toast-close { background: none; border: none; cursor: pointer; color: #94a3b8; padding: 4px; }
+        .toast-close:hover { color: #475569; }
+        @keyframes slideInRight { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+
+        /* Modal Confirm */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 60; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.2s; backdrop-filter: blur(2px); }
+        .modal-confirm { background: white; border-radius: 12px; width: 90%; max-width: 400px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); animation: scaleUp 0.2s ease-out; }
+        @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal-header { padding: 20px; display: flex; align-items: center; gap: 12px; }
+        .modal-header.warning { background: #fef3c7; color: #92400e; }
+        .modal-header.danger { background: #fee2e2; color: #991b1b; }
+        .modal-header.info { background: #eff6ff; color: #1e40af; }
+        .modal-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; background: rgba(255,255,255,0.5); }
+        .modal-title { font-size: 1.1rem; font-weight: bold; margin: 0; }
+        .modal-body { padding: 20px; color: #475569; font-size: 0.95rem; line-height: 1.5; }
+        .modal-footer { padding: 16px 20px; background: #f8fafc; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e2e8f0; }
+        .modal-btn { padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 0.875rem; cursor: pointer; border: none; transition: all 0.2s; }
+        .modal-btn-cancel { background: white; border: 1px solid #cbd5e1; color: #475569; }
+        .modal-btn-cancel:hover { background: #f1f5f9; }
+        .modal-btn-confirm { background: #3b82f6; color: white; }
+        .modal-btn-confirm:hover { background: #2563eb; }
+        .modal-btn-danger { background: #ef4444; color: white; }
+        .modal-btn-danger:hover { background: #dc2626; }
+    </style>
 </head>
 <body class="bg-slate-100 min-h-screen font-sans text-slate-800">
 
@@ -142,7 +198,6 @@
                         
                         <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50 border-slate-300">
                         <div class="bg-slate-100 p-4 rounded-lg border border-slate-200 grid grid-cols-2 gap-3">
-                            <!-- MODIFICAÇÃO: type="text" com inputmode, máscara forçada de hora e pausa opcional -->
                             <div><label class="block text-[10px] font-bold text-slate-500">ENTRADA</label><input type="text" id="hrEntrada" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" required class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
                             <div><label class="block text-[10px] font-bold text-orange-600">INÍCIO PAUSA (Opc)</label><input type="text" id="hrInicioAlmoco" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
                             <div><label class="block text-[10px] font-bold text-orange-600">FIM PAUSA (Opc)</label><input type="text" id="hrFimAlmoco" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
