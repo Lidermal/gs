@@ -1,5 +1,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyv6rztF_a5ePHzRhzCMJDawDOHhF-le_3MgvoeMY2WUGjVRQBPmt2cSuV6Mp71MGnpUQ/exec";
-const valoresHora = { "Suporte NN": 9.09, "Suporte N1": 12.73, "Suporte N2": 15.91, "Suporte N3": 19.44 };
+// Suporte N1 reajustado: R$ 2.851,31 / 220h mensais (44h semanais) = R$ 12,9605 -> R$ 12,96
+const valoresHora = { "Suporte NN": 9.09, "Suporte N1": 12.96, "Suporte N2": 15.91, "Suporte N3": 19.44 };
 const TEMPO_SESSAO_MS = 4 * 60 * 60 * 1000; // 4 HORAS
 
 let userData = null;
@@ -176,24 +177,95 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
     }
 });
 
-function abrirModalRecuperar() { document.getElementById('modalRecuperar').classList.remove('hidden'); document.getElementById('recupResult').classList.add('hidden'); }
-function fecharModalRecuperar() { document.getElementById('modalRecuperar').classList.add('hidden'); }
+// ===== RECUPERAR SENHA (buscar usuário > selecionar > redefinir) =====
+let recupLoginSelecionado = null;
+let recupTimer = null;
 
-async function buscarSenha() {
-    const login = document.getElementById('recupLogin').value.trim().toLowerCase();
-    if(!login) { showToast('Informe seu login!', 'warning', 'Campo Obrigatório'); return; }
-    const btn = document.getElementById('btnBuscarSenha');
-    const originalText = btn.innerText;
-    btn.disabled = true; btn.innerHTML = '<span class="loader-small"></span> Buscando...';
+function abrirModalRecuperar() {
+    document.getElementById('modalRecuperar').classList.remove('hidden');
+    voltarBuscaRecuperar();
+    document.getElementById('recupLogin').value = '';
+    document.getElementById('recupLogin').focus();
+}
+function fecharModalRecuperar() { document.getElementById('modalRecuperar').classList.add('hidden'); recupLoginSelecionado = null; }
+
+function voltarBuscaRecuperar() {
+    recupLoginSelecionado = null;
+    document.getElementById('recupStepBusca').classList.remove('hidden');
+    document.getElementById('recupStepSenha').classList.add('hidden');
+    document.getElementById('recupLista').innerHTML = '';
+    document.getElementById('recupNovaSenha').value = '';
+    document.getElementById('recupConfirmaSenha').value = '';
+}
+
+function buscarUsuariosRecuperar(imediato = false) {
+    clearTimeout(recupTimer);
+    recupTimer = setTimeout(executarBuscaRecuperar, imediato ? 0 : 400);
+}
+
+async function executarBuscaRecuperar() {
+    const q = document.getElementById('recupLogin').value.trim();
+    const lista = document.getElementById('recupLista');
+    if (q.length < 2) { lista.innerHTML = '<p class="text-xs text-slate-400 text-center py-2">Digite pelo menos 2 letras do login.</p>'; return; }
+    lista.innerHTML = '<p class="text-xs text-slate-400 text-center py-2"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Buscando...</p>';
     try {
-        const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getPassword', login: login }) });
+        const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'searchUsers', query: q }) });
         const res = await r.json();
-        const resultDiv = document.getElementById('recupResult');
-        resultDiv.classList.remove('hidden');
-        if(res.success) { resultDiv.className = "mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-sm font-mono text-center break-all"; resultDiv.innerHTML = `<div class="text-[10px] uppercase font-bold mb-1">Sua senha é:</div>${res.senha}`; }
-        else { resultDiv.className = "mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm text-center"; resultDiv.innerText = res.message || 'Usuário não encontrado.'; }
-    } catch(e) { showToast('Erro de conexão', 'error'); }
-    finally { btn.disabled = false; btn.innerText = originalText; }
+        lista.innerHTML = '';
+        if (!res.success || !res.users || res.users.length === 0) {
+            lista.innerHTML = '<p class="text-xs text-red-500 text-center py-2">Nenhum usuário encontrado.</p>';
+            return;
+        }
+        res.users.forEach(u => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-full text-left px-3 py-2 mb-1 border rounded bg-slate-50 hover:bg-emerald-50 hover:border-emerald-400 transition flex items-center gap-3';
+            const icon = document.createElement('i'); icon.className = 'fa-solid fa-user text-slate-400';
+            const box = document.createElement('div');
+            const nome = document.createElement('p'); nome.className = 'text-sm font-bold text-slate-800'; nome.textContent = u.nome;
+            const login = document.createElement('p'); login.className = 'text-[11px] text-slate-500 font-mono'; login.textContent = u.login;
+            box.appendChild(nome); box.appendChild(login);
+            btn.appendChild(icon); btn.appendChild(box);
+            btn.onclick = () => selecionarUsuarioRecuperar(u);
+            lista.appendChild(btn);
+        });
+    } catch (e) {
+        lista.innerHTML = '<p class="text-xs text-red-500 text-center py-2">Erro de conexão.</p>';
+    }
+}
+
+function selecionarUsuarioRecuperar(u) {
+    recupLoginSelecionado = u.login;
+    document.getElementById('recupUsuarioNome').textContent = u.nome;
+    document.getElementById('recupUsuarioLogin').textContent = u.login;
+    document.getElementById('recupStepBusca').classList.add('hidden');
+    document.getElementById('recupStepSenha').classList.remove('hidden');
+    document.getElementById('recupNovaSenha').focus();
+}
+
+async function redefinirSenha() {
+    const nova = document.getElementById('recupNovaSenha').value;
+    const conf = document.getElementById('recupConfirmaSenha').value;
+    if (!recupLoginSelecionado) { showToast('Selecione um usuário primeiro.', 'warning'); return; }
+    if (nova.length < 4) { showToast('A senha deve ter pelo menos 4 caracteres.', 'warning', 'Senha curta'); return; }
+    if (nova !== conf) { showToast('As senhas não conferem!', 'error', 'Erro de Validação'); return; }
+    const btn = document.getElementById('btnRedefinirSenha');
+    const originalText = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="loader-small"></span> Salvando...';
+    try {
+        const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'resetPassword', login: recupLoginSelecionado, novaSenha: nova }) });
+        const res = await r.json();
+        if (res.success) {
+            const login = recupLoginSelecionado;
+            fecharModalRecuperar();
+            document.getElementById('loginUser').value = login;
+            document.getElementById('loginSenha').value = '';
+            showToast('Agora é só entrar com a nova senha.', 'success', 'Senha redefinida');
+        } else {
+            showToast(res.message || 'Não foi possível redefinir a senha.', 'error', 'Erro');
+        }
+    } catch (e) { showToast('Erro de conexão', 'error'); }
+    finally { btn.disabled = false; btn.innerHTML = originalText; }
 }
 
 function initApp() {
@@ -283,6 +355,27 @@ function timeToMins(t) { if (!t) return 0; const [h, m] = t.split(':').map(Numbe
 function minsToTime(m) { return `${m<0?"-":""}${String(Math.floor(Math.abs(m)/60)).padStart(2,'0')}:${String(Math.floor(Math.abs(m)%60)).padStart(2,'0')}`; }
 function halveTime(timeStr) { if (!timeStr || timeStr === "00:00") return "00:00"; return minsToTime(timeToMins(timeStr) / 2); }
 
+// Cálculo único usado no lançamento e na importação de projetos compartilhados.
+// Feriado: TODAS as horas trabalhadas contam como extra e o valor a receber é dobrado.
+// As horas guardadas/exibidas continuam sendo as reais.
+function calcularApontamento(dV, entrada, inicioAlmoco, fimAlmoco, saida, feriado, equipe, nivel) {
+    let minsTrab = 0;
+    if (inicioAlmoco && fimAlmoco && inicioAlmoco !== "00:00" && fimAlmoco !== "00:00") minsTrab = (timeToMins(inicioAlmoco) - timeToMins(entrada)) + (timeToMins(saida) - timeToMins(fimAlmoco));
+    else minsTrab = timeToMins(saida) - timeToMins(entrada);
+    const diaSemana = new Date(dV + "T00:00:00").getDay();
+    const escala = determinarEscala(equipe, dV);
+    let mExt;
+    if (feriado) {
+        mExt = minsTrab < 0 ? 0 : minsTrab;
+    } else {
+        mExt = minsTrab - getMinutosPrevistos(escala, dV); if (mExt < 0) mExt = 0;
+        if (diaSemana === 0) mExt = mExt * 2;
+    }
+    const vHora = valoresHora[nivel] || 0;
+    const multiplicador = feriado ? 2 : 1;
+    return { escala, minsTrab, mExt, vHora, totalReceber: (mExt / 60) * vHora * multiplicador };
+}
+
 function cancelarEdicao() {
     document.getElementById('tripForm').reset(); document.getElementById('editTripId').value = '';
     document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
@@ -298,6 +391,7 @@ function carregarParaEdicao(idTrip) {
     document.getElementById('hrInicioAlmoco').value = t.inicioAlmoco || "";
     document.getElementById('hrFimAlmoco').value = t.fimAlmoco || "";
     document.getElementById('hrSaida').value = t.saida;
+    document.getElementById('chkFeriado').checked = !!t.feriado;
     document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento';
     document.getElementById('btnSalvar').classList.replace('bg-blue-600', 'bg-orange-500');
     document.getElementById('btnSalvar').classList.replace('hover:bg-blue-700', 'hover:bg-orange-600');
@@ -316,15 +410,9 @@ document.getElementById('tripForm').addEventListener('submit', async (e) => {
     const hrSaida = document.getElementById('hrSaida').value;
     const hrInicioAlmoco = document.getElementById('hrInicioAlmoco').value;
     const hrFimAlmoco = document.getElementById('hrFimAlmoco').value;
-    let minsTrab = 0;
-    if (hrInicioAlmoco && hrFimAlmoco) minsTrab = (timeToMins(hrInicioAlmoco) - timeToMins(hrEntrada)) + (timeToMins(hrSaida) - timeToMins(hrFimAlmoco));
-    else minsTrab = timeToMins(hrSaida) - timeToMins(hrEntrada);
-    const diaSemana = new Date(dV + "T00:00:00").getDay();
-    const escA = determinarEscala(userData.equipe, dV);
-    let mExt = minsTrab - getMinutosPrevistos(escA, dV); if (mExt < 0) mExt = 0;
-    if (diaSemana === 0) mExt = mExt * 2;
-    const vHora = valoresHora[userData.nivel] || 0;
-    const payload = { action: isEdit ? 'editTrip' : 'saveTrip', idViagem: document.getElementById('editTripId').value, login: userData.login, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo, data: dV, escala: escA, entrada: hrEntrada, inicioAlmoco: hrInicioAlmoco || "", fimAlmoco: hrFimAlmoco || "", saida: hrSaida, totalHoras: minsToTime(minsTrab), horasExtras: minsToTime(mExt), valorHoraExtra: vHora, totalReceber: (mExt / 60) * vHora };
+    const isFeriado = document.getElementById('chkFeriado').checked;
+    const calc = calcularApontamento(dV, hrEntrada, hrInicioAlmoco, hrFimAlmoco, hrSaida, isFeriado, userData.equipe, userData.nivel);
+    const payload = { action: isEdit ? 'editTrip' : 'saveTrip', idViagem: document.getElementById('editTripId').value, login: userData.login, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo, data: dV, escala: calc.escala, entrada: hrEntrada, inicioAlmoco: hrInicioAlmoco || "", fimAlmoco: hrFimAlmoco || "", saida: hrSaida, totalHoras: minsToTime(calc.minsTrab), horasExtras: minsToTime(calc.mExt), valorHoraExtra: calc.vHora, totalReceber: calc.totalReceber, feriado: isFeriado };
     const r = await fetchAPI(payload, btnId, 'btnSalvarTexto', msgId, originalText);
     if(r && r.success) { showToast(isEdit ? 'Registro atualizado!' : 'Apontamento registrado!', 'success', isEdit ? 'Atualizado' : 'Salvo'); cancelarEdicao(); carregarTudo(); setTimeout(() => document.getElementById(msgId).classList.add('hidden'), 3000); }
 });
@@ -359,11 +447,13 @@ function renderizarWorkspace() {
             const diaSemanaInt = new Date(dateStr + "T00:00:00").getDay();
             const df = dateStr.split('-').reverse().join('/') + ` (${obterDiaSemana(dateStr)})`;
             let horasExibicaoAtividades = t.horasExtras;
-            if (diaSemanaInt === 0) horasExibicaoAtividades = halveTime(t.horasExtras);
+            if (diaSemanaInt === 0 && !t.feriado) horasExibicaoAtividades = halveTime(t.horasExtras);
+            const badgeFeriado = t.feriado ? ' <span class="ml-1 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-300">FERIADO</span>' : '';
+            const taxaExibida = Number(t.valorHoraExtra) * (t.feriado ? 2 : 1);
             const hExt = horasExibicaoAtividades !== '00:00';
             valorTotal += Number(t.totalReceber);
-            tbH.innerHTML += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true"><button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-            tbF.innerHTML += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}</td><td class="px-4 py-3 text-center font-mono text-slate-600">${t.horasExtras}</td><td class="px-4 py-3 text-right text-slate-500">R$ ${Number(t.valorHoraExtra).toFixed(2).replace('.', ',')}</td><td class="px-4 py-3 text-right font-bold text-emerald-600">R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}</td></tr>`;
+            tbH.innerHTML += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true"><button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+            tbF.innerHTML += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-center font-mono text-slate-600">${t.horasExtras}</td><td class="px-4 py-3 text-right text-slate-500">R$ ${taxaExibida.toFixed(2).replace('.', ',')}${t.feriado ? ' <span class="text-[10px] text-amber-600 font-bold">(2x)</span>' : ''}</td><td class="px-4 py-3 text-right font-bold text-emerald-600">R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}</td></tr>`;
         });
         document.getElementById('valorTotalProjeto').textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
     } else {
@@ -390,14 +480,9 @@ async function usarSharedProject(sharedData) {
     document.getElementById('msgRecebendo').classList.remove('hidden');
     const novasViagensRecalculadas = sharedData.trips.map(trip => {
         const dV = trip.data.includes('T') ? trip.data.split('T')[0] : trip.data;
-        let minsTrab = 0;
-        if (trip.inicioAlmoco && trip.fimAlmoco && trip.inicioAlmoco !== "00:00" && trip.fimAlmoco !== "00:00") minsTrab = (timeToMins(trip.inicioAlmoco) - timeToMins(trip.entrada)) + (timeToMins(trip.saida) - timeToMins(trip.fimAlmoco));
-        else minsTrab = timeToMins(trip.saida) - timeToMins(trip.entrada);
-        const escA = determinarEscala(userData.equipe, dV);
-        let mExt = minsTrab - getMinutosPrevistos(escA, dV); if (mExt < 0) mExt = 0;
-        if (new Date(dV + "T00:00:00").getDay() === 0) mExt = mExt * 2;
-        const vHora = valoresHora[userData.nivel] || 0;
-        return { login: userData.login, sigla: sharedData.sigla, tipoProjeto: sharedData.tipoProjeto, data: dV, escala: escA, entrada: trip.entrada, inicioAlmoco: trip.inicioAlmoco || "", fimAlmoco: trip.fimAlmoco || "", saida: trip.saida, totalHoras: minsToTime(minsTrab), horasExtras: minsToTime(mExt), valorHoraExtra: vHora, totalReceber: (mExt / 60) * vHora };
+        const feriado = !!trip.feriado;
+        const calc = calcularApontamento(dV, trip.entrada, trip.inicioAlmoco, trip.fimAlmoco, trip.saida, feriado, userData.equipe, userData.nivel);
+        return { login: userData.login, sigla: sharedData.sigla, tipoProjeto: sharedData.tipoProjeto, data: dV, escala: calc.escala, entrada: trip.entrada, inicioAlmoco: trip.inicioAlmoco || "", fimAlmoco: trip.fimAlmoco || "", saida: trip.saida, totalHoras: minsToTime(calc.minsTrab), horasExtras: minsToTime(calc.mExt), valorHoraExtra: calc.vHora, totalReceber: calc.totalReceber, feriado: feriado };
     });
     const r = await fetchAPI({ action: 'saveMultipleTrips', trips: novasViagensRecalculadas, idCompartilhamento: sharedData.idShare }, null, null, null, null);
     document.getElementById('msgRecebendo').classList.add('hidden');
@@ -443,6 +528,7 @@ async function gerarPDF() {
     
     let minRegulares = 0;
     let minDomingoReal = 0;
+    let minFeriado = 0;
     
     const tableData = projTrips.map(t => {
         const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
@@ -451,10 +537,11 @@ async function gerarPDF() {
         const diaSemanaStr = obterDiaSemana(dateStr);
         let horasParaTabela = t.horasExtras;
         let minsExtraCalculo = timeToMins(t.horasExtras);
-        if (diaSemanaInt === 0) { horasParaTabela = halveTime(t.horasExtras); minDomingoReal += timeToMins(horasParaTabela); }
+        if (t.feriado) { minFeriado += minsExtraCalculo; }
+        else if (diaSemanaInt === 0) { horasParaTabela = halveTime(t.horasExtras); minDomingoReal += timeToMins(horasParaTabela); }
         else { minRegulares += minsExtraCalculo; }
         const pausaTexto = (t.inicioAlmoco && t.fimAlmoco) ? `${t.inicioAlmoco} / ${t.fimAlmoco}` : 'Sem Pausa';
-        return [`${df} (${diaSemanaStr})`, `${t.entrada} - ${pausaTexto} - ${t.saida}`, horasParaTabela];
+        return [`${df} (${diaSemanaStr})${t.feriado ? ' - FERIADO' : ''}`, `${t.entrada} - ${pausaTexto} - ${t.saida}`, horasParaTabela];
     });
     
     doc.autoTable({ 
@@ -468,18 +555,19 @@ async function gerarPDF() {
         alternateRowStyles: { fillColor: [248, 250, 252] } 
     });
     
-    const totalMinsExtras = minRegulares + minDomingoReal;
+    const totalMinsExtras = minRegulares + minDomingoReal + minFeriado;
     
     // Monta o array de resumo dinamicamente
     const summaryData = [
         ['TOTAL HORAS REGULARES', minsToTime(minRegulares)],
         ['TOTAL HORAS DOMINGO', minsToTime(minDomingoReal)],
+        ['TOTAL HORAS FERIADO', minsToTime(minFeriado)],
         ['TOTAL HORAS EXTRAS', minsToTime(totalMinsExtras)]
     ];
 
     // Adiciona TOTAL SOMADAS apenas se o usuário escolheu "Sim"
     if (includeSomadas) {
-        const totalMinsSomadas = totalMinsExtras + minDomingoReal;
+        const totalMinsSomadas = totalMinsExtras + minDomingoReal + minFeriado;
         summaryData.push(['TOTAL HORAS SOMADAS', minsToTime(totalMinsSomadas)]);
     }
 
