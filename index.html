@@ -248,6 +248,13 @@
                     <form id="tripForm" class="p-5 space-y-4">
                         <input type="hidden" id="editTripId" value="">
                         <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50 border-slate-300">
+                        <label class="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 cursor-pointer select-none">
+                            <input type="checkbox" id="chkFeriado" class="mt-0.5 h-4 w-4 accent-amber-500">
+                            <span>
+                                <span class="block text-xs font-bold text-amber-800"><i class="fa-solid fa-calendar-day mr-1"></i> Este dia foi feriado</span>
+                                <span class="block text-[11px] text-amber-700">Todas as horas contam como extra e o valor a receber é dobrado.</span>
+                            </span>
+                        </label>
                         <div class="bg-slate-100 p-4 rounded-lg border border-slate-200 grid grid-cols-2 gap-3">
                             <div><label class="block text-[10px] font-bold text-slate-500">ENTRADA</label><input type="text" id="hrEntrada" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" required class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
                             <div><label class="block text-[10px] font-bold text-orange-600">INÍCIO PAUSA (Opc)</label><input type="text" id="hrInicioAlmoco" inputmode="numeric" maxlength="5" placeholder="00:00" oninput="mascaraHora(this)" onblur="validarHora(this)" class="w-full px-2 py-1.5 border rounded font-mono text-center text-sm bg-white"></div>
@@ -347,14 +354,36 @@
 
     <!-- MODAL RECUPERAR SENHA -->
     <div id="modalRecuperar" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center fade-in">
-        <div class="bg-white p-6 rounded-xl shadow-xl w-96 border-t-4 border-emerald-500">
-            <h3 class="text-lg font-bold text-slate-800 mb-4"><i class="fa-solid fa-unlock-keyhole text-emerald-500 mr-2"></i> Recuperar Senha</h3>
-            <p class="text-xs text-slate-500 mb-4">Digite seu login exato para visualizar sua senha cadastrada.</p>
-            <input type="text" id="recupLogin" placeholder="nome.sobrenome" class="w-full px-3 py-2 text-sm border rounded bg-slate-50 mb-4 lowercase">
-            <div id="recupResult" class="hidden mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-sm font-mono text-center break-all"></div>
-            <div class="flex justify-end gap-2">
-                <button onclick="fecharModalRecuperar()" class="px-4 py-2 text-sm font-bold text-slate-500">Fechar</button>
-                <button onclick="buscarSenha()" id="btnBuscarSenha" class="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded shadow">Buscar</button>
+        <div class="bg-white p-6 rounded-xl shadow-xl w-96 max-w-[95%] border-t-4 border-emerald-500">
+            <h3 class="text-lg font-bold text-slate-800 mb-4"><i class="fa-solid fa-unlock-keyhole text-emerald-500 mr-2"></i> Redefinir Senha</h3>
+
+            <!-- ETAPA 1: buscar e selecionar usuário -->
+            <div id="recupStepBusca">
+                <p class="text-xs text-slate-500 mb-3">Digite seu login e selecione seu usuário na lista.</p>
+                <input type="text" id="recupLogin" autocomplete="off" placeholder="nome.sobrenome" oninput="buscarUsuariosRecuperar()" onkeydown="if(event.key==='Enter'){event.preventDefault();buscarUsuariosRecuperar(true);}" class="w-full px-3 py-2 text-sm border rounded bg-slate-50 mb-3 lowercase">
+                <div id="recupLista" class="max-h-48 overflow-auto custom-scrollbar mb-4"></div>
+                <div class="flex justify-end">
+                    <button onclick="fecharModalRecuperar()" class="px-4 py-2 text-sm font-bold text-slate-500">Fechar</button>
+                </div>
+            </div>
+
+            <!-- ETAPA 2: nova senha + confirmação -->
+            <div id="recupStepSenha" class="hidden">
+                <div class="flex items-center gap-3 p-3 mb-4 border border-emerald-200 bg-emerald-50 rounded">
+                    <i class="fa-solid fa-circle-user text-emerald-600 text-xl"></i>
+                    <div>
+                        <p id="recupUsuarioNome" class="text-sm font-bold text-slate-800"></p>
+                        <p id="recupUsuarioLogin" class="text-[11px] text-slate-500 font-mono"></p>
+                    </div>
+                </div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">NOVA SENHA</label>
+                <input type="password" id="recupNovaSenha" autocomplete="new-password" placeholder="Mínimo 4 caracteres" class="w-full px-3 py-2 text-sm border rounded bg-slate-50 mb-3">
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">CONFIRMAR NOVA SENHA</label>
+                <input type="password" id="recupConfirmaSenha" autocomplete="new-password" placeholder="Repita a nova senha" onkeydown="if(event.key==='Enter'){event.preventDefault();redefinirSenha();}" class="w-full px-3 py-2 text-sm border rounded bg-slate-50 mb-4">
+                <div class="flex justify-between gap-2">
+                    <button onclick="voltarBuscaRecuperar()" class="px-4 py-2 text-sm font-bold text-slate-500"><i class="fa-solid fa-arrow-left mr-1"></i> Trocar usuário</button>
+                    <button onclick="redefinirSenha()" id="btnRedefinirSenha" class="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded shadow">Redefinir senha</button>
+                </div>
             </div>
         </div>
     </div>
