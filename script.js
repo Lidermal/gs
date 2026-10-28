@@ -1,12 +1,49 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyv6rztF_a5ePHzRhzCMJDawDOHhF-le_3MgvoeMY2WUGjVRQBPmt2cSuV6Mp71MGnpUQ/exec";
+const DESPESAS_URL = "https://despesas-gs.vercel.app/";
 // Suporte N1 reajustado: R$ 2.851,31 / 220h mensais (44h semanais) = R$ 12,9605 -> R$ 12,96
 const valoresHora = { "Suporte NN": 9.09, "Suporte N1": 12.96, "Suporte N2": 15.91, "Suporte N3": 19.44 };
 const TEMPO_SESSAO_MS = 4 * 60 * 60 * 1000; // 4 HORAS
+const POLL_SUPORTE_MS = 8000;   // atualização automática (suporte)
+const POLL_GESTAO_MS = 10000;   // atualização automática (coordenação/gerência)
 
 let userData = null;
 let allTrips = [];
+let colegas = [];
+let sharedList = [];
 let currentProject = { sigla: '', tipo: '' };
 let sessionInterval = null;
+let pollTimer = null, polling = false, pollPromise = null;
+let jaCarregou = false, lastSig = '', lastSharedSig = '', busy = 0;
+let colegasPromise = null;
+let tecnicosSel = new Set();
+
+const $ = (id) => document.getElementById(id);
+function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+const RX_GESTAO = /Coordena|Ger[eê]ncia/i;
+function isGestao() { return !!userData && RX_GESTAO.test(userData.nivel || ''); }
+function isTecnico(u) { return !RX_GESTAO.test(u.nivel || ''); }
+
+// ===== LOGIN ÚNICO ENTRE SISTEMAS (recebe a sessão vinda do despesas-gs) =====
+(function consumirSSO() {
+    const m = location.hash.match(/^#sso=(.+)$/);
+    if (!m) return;
+    try {
+        const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+        const t = parseInt(o.t, 10);
+        if (o && o.u && o.u.login && t && (Date.now() - t < TEMPO_SESSAO_MS)) {
+            localStorage.setItem('usuarioAtivo', JSON.stringify(o.u));
+            localStorage.setItem('loginTimestamp', String(t));
+        }
+    } catch (e) {}
+    history.replaceState(null, '', location.pathname + location.search);
+})();
+
+function irParaDespesas() {
+    if (!userData) return;
+    const pacote = { u: userData, t: localStorage.getItem('loginTimestamp') || Date.now().toString() };
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(pacote))));
+    window.location.href = DESPESAS_URL + '#sso=' + payload;
+}
 
 // ===== GERENCIAMENTO DE SESSÃO =====
 function iniciarMonitoramentoSessao() {
@@ -22,11 +59,15 @@ function iniciarMonitoramentoSessao() {
 }
 
 function logout(forcarReload = false) {
+    pararPolling();
+    if (userData) { try { localStorage.removeItem('tripsCache_' + userData.login); } catch (e) {} }
     localStorage.removeItem('usuarioAtivo');
     localStorage.removeItem('loginTimestamp');
-    userData = null;
+    userData = null; allTrips = []; colegas = []; colegasPromise = null; sharedList = [];
+    jaCarregou = false; lastSig = ''; lastSharedSig = '';
+    currentProject = { sigla: '', tipo: '' };
     if (sessionInterval) clearInterval(sessionInterval);
-    document.getElementById('globalHeader').classList.add('hidden');
+    $('globalHeader').classList.add('hidden');
     showView('authView');
     if (forcarReload) window.location.reload();
     else showToast('Você saiu do sistema', 'info', 'Logout');
@@ -50,7 +91,7 @@ function validarHora(input) {
 
 // ===== TOASTS =====
 function showToast(message, type = 'info', title = null, duration = 4000) {
-    const container = document.getElementById('toastContainer');
+    const container = $('toastContainer');
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
@@ -70,8 +111,8 @@ function showConfirm(message, options = {}) {
         overlay.innerHTML = `<div class="modal-confirm"><div class="modal-header ${type}"><div class="modal-icon"><i class="fa-solid ${icon || icons[type]}"></i></div><h3 class="modal-title">${title}</h3></div><div class="modal-body"><p class="modal-message">${message}</p></div><div class="modal-footer"><button class="modal-btn modal-btn-cancel" id="modalCancel">${cancelText}</button><button class="modal-btn ${type === 'danger' ? 'modal-btn-danger' : 'modal-btn-confirm'}" id="modalConfirm">${confirmText}</button></div></div>`;
         document.body.appendChild(overlay);
         const cleanup = () => { overlay.style.animation = 'fadeIn 0.2s ease-out reverse'; setTimeout(() => overlay.remove(), 200); };
-        document.getElementById('modalConfirm').onclick = () => { cleanup(); resolve(true); };
-        document.getElementById('modalCancel').onclick = () => { cleanup(); resolve(false); };
+        $('modalConfirm').onclick = () => { cleanup(); resolve(true); };
+        $('modalCancel').onclick = () => { cleanup(); resolve(false); };
         overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); resolve(false); } };
     });
 }
@@ -82,7 +123,7 @@ window.onload = () => {
     const loginTime = localStorage.getItem('loginTimestamp');
     if (savedUser && loginTime && (Date.now() - parseInt(loginTime) < TEMPO_SESSAO_MS)) {
         userData = JSON.parse(savedUser);
-        document.getElementById('globalHeader').classList.remove('hidden');
+        $('globalHeader').classList.remove('hidden');
         showView('projectsView');
         initApp();
         iniciarMonitoramentoSessao();
@@ -94,23 +135,23 @@ window.onload = () => {
 };
 
 function showView(viewId) {
-    ['authView', 'projectsView', 'dashboardView', 'profileView'].forEach(id => document.getElementById(id).classList.add('hidden'));
-    const el = document.getElementById(viewId);
+    ['authView', 'projectsView', 'dashboardView', 'profileView'].forEach(id => $(id).classList.add('hidden'));
+    const el = $(viewId);
     el.classList.remove('hidden');
     el.classList.add('fade-in');
 }
 
 function toggleAuthView(view) {
-    const loginSec = document.getElementById('loginSection');
-    const regSec = document.getElementById('registerSection');
+    const loginSec = $('loginSection');
+    const regSec = $('registerSection');
     if(view === 'register') { loginSec.classList.add('hidden'); regSec.classList.remove('hidden'); regSec.classList.add('fade-in'); }
     else { regSec.classList.add('hidden'); loginSec.classList.remove('hidden'); loginSec.classList.add('fade-in'); }
 }
 
 async function fetchAPI(data, btnId, textId, msgId, originalText) {
-    const btn = btnId ? document.getElementById(btnId) : null;
-    const textSpan = textId ? document.getElementById(textId) : null;
-    const msgDiv = msgId ? document.getElementById(msgId) : null;
+    const btn = btnId ? $(btnId) : null;
+    const textSpan = textId ? $(textId) : null;
+    const msgDiv = msgId ? $(msgId) : null;
     if(btn) { btn.disabled = true; btn.classList.add('opacity-75', 'cursor-not-allowed'); textSpan.innerHTML = '<span class="loader"></span>'; }
     if(msgDiv) msgDiv.classList.add('hidden');
     try {
@@ -130,50 +171,58 @@ async function fetchAPI(data, btnId, textId, msgId, originalText) {
     }
 }
 
+// Requisição "silenciosa" (sem toasts/loaders) usada pela sincronização
+async function postAPI(data) {
+    try { const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify(data) }); return await r.json(); }
+    catch (e) { return null; }
+}
+
 // ===== AUTH & PERFIL =====
-document.getElementById('registerForm').addEventListener('submit', async (e) => {
+$('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = { action: 'register', nome: document.getElementById('regNome').value, sobrenome: document.getElementById('regSobrenome').value, equipe: document.getElementById('regEquipe').value, nivel: document.getElementById('regNivel').value, senha: document.getElementById('regSenha').value };
+    const data = { action: 'register', nome: $('regNome').value, sobrenome: $('regSobrenome').value, equipe: $('regEquipe').value, nivel: $('regNivel').value, senha: $('regSenha').value };
     const r = await fetchAPI(data, 'btnRegister', 'regText', 'regMsg', '<i class="fa-solid fa-save mr-2"></i> Cadastrar');
-    if(r && r.success) { document.getElementById('registerForm').reset(); showToast(`Seu login é: <b>${r.login}</b>`, 'success', 'Cadastro Realizado!'); setTimeout(() => { document.getElementById('loginUser').value = r.login; toggleAuthView('login'); }, 2000); }
+    if(r && r.success) { $('registerForm').reset(); showToast(`Seu login é: <b>${r.login}</b>`, 'success', 'Cadastro Realizado!'); setTimeout(() => { $('loginUser').value = r.login; toggleAuthView('login'); }, 2000); }
 });
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
+$('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = { action: 'login', login: document.getElementById('loginUser').value.trim(), senha: document.getElementById('loginSenha').value };
+    const data = { action: 'login', login: $('loginUser').value.trim(), senha: $('loginSenha').value };
     const r = await fetchAPI(data, 'btnLogin', 'loginText', 'loginMsg', 'Acessar <i class="fa-solid fa-arrow-right-to-bracket ml-2"></i>');
     if(r && r.success) {
         localStorage.setItem('usuarioAtivo', JSON.stringify(r.user));
         localStorage.setItem('loginTimestamp', Date.now().toString());
         userData = r.user;
         showToast('Bem-vindo ao portal!', 'success', 'Login Realizado');
-        setTimeout(() => { document.getElementById('globalHeader').classList.remove('hidden'); showView('projectsView'); initApp(); iniciarMonitoramentoSessao(); document.getElementById('loginForm').reset(); document.getElementById('loginMsg').classList.add('hidden'); }, 1000);
+        // entra imediatamente (sem esperar 1s) para ficar mais fluido
+        $('globalHeader').classList.remove('hidden'); showView('projectsView'); initApp(); iniciarMonitoramentoSessao();
+        $('loginForm').reset(); $('loginMsg').classList.add('hidden');
     }
 });
 
 function abrirPerfil() {
     if(!userData) return;
-    document.getElementById('profNome').value = userData.nome;
-    document.getElementById('profSobrenome').value = userData.sobrenome;
-    document.getElementById('profNovaSenha').value = '';
-    document.getElementById('profConfirmaSenha').value = '';
-    document.getElementById('msgPerfil').classList.add('hidden');
+    $('profNome').value = userData.nome;
+    $('profSobrenome').value = userData.sobrenome;
+    $('profNovaSenha').value = '';
+    $('profConfirmaSenha').value = '';
+    $('msgPerfil').classList.add('hidden');
     showView('profileView');
 }
 
-document.getElementById('profileForm').addEventListener('submit', async (e) => {
+$('profileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const novaSenha = document.getElementById('profNovaSenha').value;
-    const confirmaSenha = document.getElementById('profConfirmaSenha').value;
+    const novaSenha = $('profNovaSenha').value;
+    const confirmaSenha = $('profConfirmaSenha').value;
     if(novaSenha && novaSenha !== confirmaSenha) { showToast('As senhas não conferem!', 'error', 'Erro de Validação'); return; }
-    const payload = { action: 'updateProfile', login: userData.login, nome: document.getElementById('profNome').value, sobrenome: document.getElementById('profSobrenome').value, novaSenha: novaSenha || null };
+    const payload = { action: 'updateProfile', login: userData.login, nome: $('profNome').value, sobrenome: $('profSobrenome').value, novaSenha: novaSenha || null };
     const r = await fetchAPI(payload, 'btnSalvarPerfil', 'btnSalvarPerfilTexto', 'msgPerfil', '<i class="fa-solid fa-check mr-2"></i> Salvar Alterações');
     if(r && r.success) {
         showToast('Perfil atualizado com sucesso!', 'success', 'Salvo');
         userData.nome = payload.nome; userData.sobrenome = payload.sobrenome;
         localStorage.setItem('usuarioAtivo', JSON.stringify(userData));
-        document.getElementById('navUserName').textContent = `${userData.nome} ${userData.sobrenome}`;
-        if(novaSenha) { document.getElementById('profNovaSenha').value = ''; document.getElementById('profConfirmaSenha').value = ''; }
+        $('navUserName').textContent = `${userData.nome} ${userData.sobrenome}`;
+        if(novaSenha) { $('profNovaSenha').value = ''; $('profConfirmaSenha').value = ''; }
     }
 });
 
@@ -182,20 +231,20 @@ let recupLoginSelecionado = null;
 let recupTimer = null;
 
 function abrirModalRecuperar() {
-    document.getElementById('modalRecuperar').classList.remove('hidden');
+    $('modalRecuperar').classList.remove('hidden');
     voltarBuscaRecuperar();
-    document.getElementById('recupLogin').value = '';
-    document.getElementById('recupLogin').focus();
+    $('recupLogin').value = '';
+    $('recupLogin').focus();
 }
-function fecharModalRecuperar() { document.getElementById('modalRecuperar').classList.add('hidden'); recupLoginSelecionado = null; }
+function fecharModalRecuperar() { $('modalRecuperar').classList.add('hidden'); recupLoginSelecionado = null; }
 
 function voltarBuscaRecuperar() {
     recupLoginSelecionado = null;
-    document.getElementById('recupStepBusca').classList.remove('hidden');
-    document.getElementById('recupStepSenha').classList.add('hidden');
-    document.getElementById('recupLista').innerHTML = '';
-    document.getElementById('recupNovaSenha').value = '';
-    document.getElementById('recupConfirmaSenha').value = '';
+    $('recupStepBusca').classList.remove('hidden');
+    $('recupStepSenha').classList.add('hidden');
+    $('recupLista').innerHTML = '';
+    $('recupNovaSenha').value = '';
+    $('recupConfirmaSenha').value = '';
 }
 
 function buscarUsuariosRecuperar(imediato = false) {
@@ -204,8 +253,8 @@ function buscarUsuariosRecuperar(imediato = false) {
 }
 
 async function executarBuscaRecuperar() {
-    const q = document.getElementById('recupLogin').value.trim();
-    const lista = document.getElementById('recupLista');
+    const q = $('recupLogin').value.trim();
+    const lista = $('recupLista');
     if (q.length < 2) { lista.innerHTML = '<p class="text-xs text-slate-400 text-center py-2">Digite pelo menos 2 letras do login.</p>'; return; }
     lista.innerHTML = '<p class="text-xs text-slate-400 text-center py-2"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Buscando...</p>';
     try {
@@ -236,20 +285,20 @@ async function executarBuscaRecuperar() {
 
 function selecionarUsuarioRecuperar(u) {
     recupLoginSelecionado = u.login;
-    document.getElementById('recupUsuarioNome').textContent = u.nome;
-    document.getElementById('recupUsuarioLogin').textContent = u.login;
-    document.getElementById('recupStepBusca').classList.add('hidden');
-    document.getElementById('recupStepSenha').classList.remove('hidden');
-    document.getElementById('recupNovaSenha').focus();
+    $('recupUsuarioNome').textContent = u.nome;
+    $('recupUsuarioLogin').textContent = u.login;
+    $('recupStepBusca').classList.add('hidden');
+    $('recupStepSenha').classList.remove('hidden');
+    $('recupNovaSenha').focus();
 }
 
 async function redefinirSenha() {
-    const nova = document.getElementById('recupNovaSenha').value;
-    const conf = document.getElementById('recupConfirmaSenha').value;
+    const nova = $('recupNovaSenha').value;
+    const conf = $('recupConfirmaSenha').value;
     if (!recupLoginSelecionado) { showToast('Selecione um usuário primeiro.', 'warning'); return; }
     if (nova.length < 4) { showToast('A senha deve ter pelo menos 4 caracteres.', 'warning', 'Senha curta'); return; }
     if (nova !== conf) { showToast('As senhas não conferem!', 'error', 'Erro de Validação'); return; }
-    const btn = document.getElementById('btnRedefinirSenha');
+    const btn = $('btnRedefinirSenha');
     const originalText = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = '<span class="loader-small"></span> Salvando...';
     try {
@@ -258,8 +307,8 @@ async function redefinirSenha() {
         if (res.success) {
             const login = recupLoginSelecionado;
             fecharModalRecuperar();
-            document.getElementById('loginUser').value = login;
-            document.getElementById('loginSenha').value = '';
+            $('loginUser').value = login;
+            $('loginSenha').value = '';
             showToast('Agora é só entrar com a nova senha.', 'success', 'Senha redefinida');
         } else {
             showToast(res.message || 'Não foi possível redefinir a senha.', 'error', 'Erro');
@@ -268,69 +317,270 @@ async function redefinirSenha() {
     finally { btn.disabled = false; btn.innerHTML = originalText; }
 }
 
+// ===== PERFIL DE ACESSO (Suporte x Coordenação/Gerência) =====
+function aplicarPerfil() {
+    const g = isGestao();
+    $('btnNovoProjeto').classList.toggle('hidden', g);
+    $('btnCriarViagemGestao').classList.toggle('hidden', !g);
+    $('blocoCompartilhados').classList.toggle('hidden', g);
+    $('projetosTitulo').textContent = g ? 'Viagens em Andamento' : 'Meus Projetos Ativos';
+    $('projetosSubtitulo').textContent = g
+        ? 'Acompanhe ao vivo os apontamentos de horas dos técnicos ou crie uma nova viagem.'
+        : 'Selecione uma loja para gerenciar apontamentos ou inicie um novo projeto.';
+}
+
 function initApp() {
-    document.getElementById('navUserName').textContent = `${userData.nome} ${userData.sobrenome}`;
-    document.getElementById('navUserRole').textContent = `Equipe ${userData.equipe} • ${userData.nivel}`;
-    voltarParaLojas(); carregarTudo(); carregarColegas();
-}
-
-async function carregarTudo() {
-    document.getElementById('level1Projects').innerHTML = '<div class="col-span-full text-center text-slate-500 py-10"><i class="fa-solid fa-spinner fa-spin text-2xl"></i> Buscando projetos...</div>';
+    $('navUserName').textContent = `${userData.nome} ${userData.sobrenome}`;
+    $('navUserRole').textContent = `Equipe ${userData.equipe} • ${userData.nivel}`;
+    aplicarPerfil();
+    voltarParaLojas();
+    jaCarregou = false; lastSig = ''; lastSharedSig = '';
+    // mostra instantaneamente o que estava em cache e atualiza em seguida
+    let temCache = false;
     try {
-        const r = await fetchAPI({ action: 'getTrips', login: userData.login });
-        if (r && r.success) { allTrips = r.trips; renderizarLojas(); if (currentProject.sigla !== '' && currentProject.tipo === '') abrirLoja(currentProject.sigla); else if (currentProject.sigla !== '' && currentProject.tipo !== '') renderizarWorkspace(); }
-    } catch(e){}
+        const c = JSON.parse(localStorage.getItem('tripsCache_' + userData.login) || 'null');
+        if (Array.isArray(c) && c.length) { allTrips = c; renderizarLojas(); temCache = true; }
+    } catch (e) {}
+    if (!temCache) $('level1Projects').innerHTML = '<div class="col-span-full text-center text-slate-500 py-10"><i class="fa-solid fa-spinner fa-spin text-2xl"></i> Buscando projetos...</div>';
+    carregarColegas();
+    atualizarDados();
+    iniciarPolling();
 }
 
+// ===== SINCRONIZAÇÃO AUTOMÁTICA =====
+function iniciarPolling() {
+    pararPolling();
+    pollTimer = setInterval(() => { if (!document.hidden && !polling && busy === 0) atualizarDados(); }, isGestao() ? POLL_GESTAO_MS : POLL_SUPORTE_MS);
+}
+function pararPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && userData) atualizarDados(); });
+window.addEventListener('online', () => { if (userData) atualizarDados(); });
+
+function carregarColegas(forcar = false) {
+    if (!colegasPromise || forcar) {
+        colegasPromise = postAPI({ action: 'getUsers' }).then(d => {
+            if (d && d.success) { colegas = d.users || []; preencherSelectShare(); }
+            else colegasPromise = null;
+            return colegas;
+        });
+    }
+    return colegasPromise;
+}
+
+function preencherSelectShare() {
+    const sel = $('shareUserSelect'); if (!sel || !userData) return;
+    sel.innerHTML = '<option value="">Selecione um colega...</option>';
+    colegas.forEach(u => { if (u.login !== userData.login && isTecnico(u)) sel.innerHTML += `<option value="${esc(u.login)}">${esc(u.nome)} (${esc(u.login)})</option>`; });
+}
+
+async function buscarTrips() {
+    if (!isGestao()) {
+        const r = await postAPI({ action: 'getTrips', login: userData.login });
+        return (r && r.success) ? (r.trips || []) : null;
+    }
+    // Coordenação/Gerência: reúne os registros de todos os técnicos
+    await carregarColegas();
+    const tecnicos = colegas.filter(isTecnico);
+    if (!tecnicos.length) return null;
+    const res = await Promise.all(tecnicos.map(async u => {
+        const r = await postAPI({ action: 'getTrips', login: u.login });
+        if (r && r.success) return (r.trips || []).map(t => Object.assign({}, t, { _login: u.login, _nome: u.nome }));
+        return allTrips.filter(t => t._login === u.login); // falhou: mantém o que já tinha
+    }));
+    return [].concat(...res);
+}
+
+async function atualizarDados() {
+    if (!userData) return;
+    while (polling) await pollPromise;
+    if (!userData) return;
+    polling = true;
+    pollPromise = executarAtualizacao();
+    try { await pollPromise; } finally { polling = false; }
+}
+
+async function executarAtualizacao() {
+    try {
+        const [trips, shared] = await Promise.all([
+            buscarTrips(),
+            isGestao() ? Promise.resolve(null) : postAPI({ action: 'getSharedTrips', login: userData.login })
+        ]);
+        if (!userData) return;
+        if (trips) aplicarTrips(trips);
+        else if (!jaCarregou && allTrips.length === 0) $('level1Projects').innerHTML = '<div class="col-span-full text-center text-amber-600 py-10"><i class="fa-solid fa-wifi mr-1"></i> Não foi possível carregar. Tentando novamente...</div>';
+        if (shared && shared.success) renderCompartilhados(shared.shared || []);
+    } catch (e) {}
+}
+
+function aplicarTrips(trips) {
+    if (busy > 0) return; // há uma ação do usuário em andamento: evita sobrescrever a tela otimista
+    const sig = JSON.stringify(trips);
+    if (sig === lastSig && jaCarregou) return;
+    const antes = allTrips.filter(t => !t.isInit).length;
+    lastSig = sig;
+    allTrips = trips;
+    try { localStorage.setItem('tripsCache_' + userData.login, sig); } catch (e) {}
+    const depois = trips.filter(t => !t.isInit).length;
+    if (jaCarregou && isGestao() && depois > antes) showToast(`${depois - antes} novo(s) apontamento(s) registrado(s).`, 'info', 'Ao vivo');
+    jaCarregou = true;
+    rerender();
+}
+
+function rerender() {
+    renderizarLojas();
+    if (currentProject.sigla) {
+        if (currentProject.tipo === '') abrirLoja(currentProject.sigla);
+        else renderizarWorkspace();
+    }
+}
+
+function renderCompartilhados(lista) {
+    const sig = JSON.stringify(lista);
+    if (sig === lastSharedSig) return;
+    if (lastSharedSig !== '' && lista.length > sharedList.length) showToast('Você recebeu um novo projeto compartilhado.', 'info', 'Compartilhado');
+    lastSharedSig = sig; sharedList = lista;
+    const el = $('listaCompartilhados'); el.innerHTML = '';
+    if (!lista.length) { el.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto recebido.</p>'; return; }
+    lista.forEach((s, i) => {
+        el.innerHTML += `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2 flex justify-between items-center hover:bg-white hover:border-blue-300 transition group shadow-sm"><div><p class="text-xs font-bold text-slate-800 uppercase">${esc(s.sigla)} - ${esc(s.tipoProjeto)}</p><p class="text-[10px] text-slate-500 mt-1">Enviado por: <b>${esc(s.remetente)}</b> (${s.trips.length} reg.)</p></div><button onclick="usarSharedProject(${i})" class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition">Aproveitar Projeto</button></div>`;
+    });
+}
+
+// ===== LOJAS / CATEGORIAS =====
 function renderizarLojas() {
-    const grid1 = document.getElementById('level1Projects');
-    if(allTrips.length === 0) { grid1.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 bg-white rounded border border-dashed border-slate-300"><i class="fa-solid fa-folder-open text-4xl mb-3"></i><br>Nenhum projeto ativo.<br>Clique em "Novo Projeto" para começar.</div>'; return; }
+    const grid1 = $('level1Projects');
+    if(allTrips.length === 0) { grid1.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 bg-white rounded border border-dashed border-slate-300"><i class="fa-solid fa-folder-open text-4xl mb-3"></i><br>Nenhum projeto ativo.<br>' + (isGestao() ? 'Clique em "Criar Viagem" para começar.' : 'Clique em "Novo Projeto" para começar.') + '</div>'; return; }
     const lojas = {};
     allTrips.forEach(t => { if(!lojas[t.sigla]) lojas[t.sigla] = 0; lojas[t.sigla]++; });
-    grid1.innerHTML = '';
+    let html = '';
     Object.keys(lojas).sort().forEach(sigla => {
-        grid1.innerHTML += `<div onclick="abrirLoja('${sigla}')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-start mb-2"><div class="bg-blue-50 text-blue-600 w-12 h-12 rounded-lg flex items-center justify-center font-bold text-xl group-hover:bg-blue-600 group-hover:text-white transition shadow-sm"><i class="fa-solid fa-store"></i></div><span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded border">${lojas[sigla]} reg.</span></div><h3 class="text-2xl font-black text-slate-800 uppercase tracking-tight mt-2">${sigla}</h3><p class="text-xs text-slate-500 font-medium">Acessar pastas da loja <i class="fa-solid fa-arrow-right ml-1"></i></p></div>`;
+        html += `<div onclick="abrirLoja('${sigla}')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-start mb-2"><div class="bg-blue-50 text-blue-600 w-12 h-12 rounded-lg flex items-center justify-center font-bold text-xl group-hover:bg-blue-600 group-hover:text-white transition shadow-sm"><i class="fa-solid fa-store"></i></div><span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded border">${lojas[sigla]} reg.</span></div><h3 class="text-2xl font-black text-slate-800 uppercase tracking-tight mt-2">${sigla}</h3><p class="text-xs text-slate-500 font-medium">Acessar pastas da loja <i class="fa-solid fa-arrow-right ml-1"></i></p></div>`;
     });
+    grid1.innerHTML = html;
 }
 
 function abrirLoja(sigla) {
     currentProject = { sigla: sigla, tipo: '' };
-    document.getElementById('level1Projects').classList.add('hidden');
-    document.getElementById('level2Projects').classList.remove('hidden');
-    document.getElementById('tituloLojaNivel2').textContent = sigla;
-    const grid2 = document.getElementById('gridNivel2'); grid2.innerHTML = '';
+    $('level1Projects').classList.add('hidden');
+    $('level2Projects').classList.remove('hidden');
+    $('tituloLojaNivel2').textContent = sigla;
+    const grid2 = $('gridNivel2'); let html = '';
     const categorias = {};
     allTrips.filter(t => t.sigla === sigla).forEach(t => { if(!categorias[t.tipo]) categorias[t.tipo] = 0; categorias[t.tipo]++; });
     Object.keys(categorias).sort().forEach(tipo => {
         const tripsReais = allTrips.filter(t => t.sigla === sigla && t.tipo === tipo && !t.isInit).length;
         const labelReg = tripsReais > 0 ? `${tripsReais} reg.` : 'Novo';
-        grid2.innerHTML += `<div onclick="abrirWorkspace('${sigla}', '${tipo}')" class="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-center mb-3"><div class="text-blue-500 group-hover:text-blue-700 transition"><i class="fa-solid fa-folder-open text-2xl"></i></div><span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${labelReg}</span></div><h4 class="text-sm font-bold text-slate-800 truncate" title="${tipo}">${tipo}</h4><p class="text-[10px] text-slate-400 mt-1 uppercase">Entrar no Workspace</p></div>`;
+        html += `<div onclick="abrirWorkspace('${sigla}', '${tipo}')" class="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-center mb-3"><div class="text-blue-500 group-hover:text-blue-700 transition"><i class="fa-solid fa-folder-open text-2xl"></i></div><span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${labelReg}</span></div><h4 class="text-sm font-bold text-slate-800 truncate" title="${tipo}">${tipo}</h4><p class="text-[10px] text-slate-400 mt-1 uppercase">${isGestao() ? 'Acompanhar ao vivo' : 'Entrar no Workspace'}</p></div>`;
     });
+    grid2.innerHTML = html;
 }
 
-function voltarParaLojas() { currentProject = { sigla: '', tipo: '' }; document.getElementById('level2Projects').classList.add('hidden'); document.getElementById('level1Projects').classList.remove('hidden'); showView('projectsView'); }
+function voltarParaLojas() { currentProject = { sigla: '', tipo: '' }; $('level2Projects').classList.add('hidden'); $('level1Projects').classList.remove('hidden'); showView('projectsView'); }
 function voltarParaCategorias() { showView('projectsView'); abrirLoja(currentProject.sigla); }
 
-function checkOutros() { const v = document.getElementById('novoProjTipo').value; if(v === 'Outros') document.getElementById('novoProjOutros').classList.remove('hidden'); else { document.getElementById('novoProjOutros').classList.add('hidden'); document.getElementById('novoProjOutros').value = ''; } }
-function abrirModalProjeto() { document.getElementById('modalProjeto').classList.remove('hidden'); }
-function fecharModalProjeto() { document.getElementById('modalProjeto').classList.add('hidden'); }
+function checkOutros() { const v = $('novoProjTipo').value; if(v === 'Outros') $('novoProjOutros').classList.remove('hidden'); else { $('novoProjOutros').classList.add('hidden'); $('novoProjOutros').value = ''; } }
+function abrirModalProjeto() { $('modalProjeto').classList.remove('hidden'); }
+function fecharModalProjeto() { $('modalProjeto').classList.add('hidden'); }
 
 async function criarProjeto() {
-    const sigla = document.getElementById('novoProjSigla').value.trim().toUpperCase();
-    let tipo = document.getElementById('novoProjTipo').value;
-    if (tipo === 'Outros') tipo = document.getElementById('novoProjOutros').value.trim();
+    const sigla = $('novoProjSigla').value.trim().toUpperCase();
+    let tipo = $('novoProjTipo').value;
+    if (tipo === 'Outros') tipo = $('novoProjOutros').value.trim();
     if(!sigla) { showToast('Informe a sigla da loja!', 'warning', 'Campo Obrigatório'); return; }
+    if(!tipo) { showToast('Informe a categoria do serviço!', 'warning', 'Campo Obrigatório'); return; }
     fecharModalProjeto();
-    await fetchAPI({ action: 'initProject', login: userData.login, sigla: sigla, tipoProjeto: tipo }, null, null, null, null);
-    await carregarTudo();
+    busy++;
+    try {
+        await fetchAPI({ action: 'initProject', login: userData.login, sigla: sigla, tipoProjeto: tipo }, null, null, null, null);
+    } finally { busy--; }
+    await atualizarDados();
     showToast(`Projeto ${sigla} - ${tipo} criado com sucesso!`, 'success', 'Novo Projeto');
     abrirWorkspace(sigla, tipo);
 }
 
+// ===== CRIAR VIAGEM (Coordenação / Gerência) - vários técnicos =====
+function checkOutrosViagem() { const v = $('novaViagemTipo').value; if (v === 'Outros') $('novaViagemOutros').classList.remove('hidden'); else { $('novaViagemOutros').classList.add('hidden'); $('novaViagemOutros').value = ''; } }
+
+async function abrirModalViagem() {
+    $('novaViagemSigla').value = ''; $('novaViagemMotivo').value = ''; $('novaViagemOutros').value = ''; $('buscaTecnico').value = '';
+    $('novaViagemTipo').value = 'Inauguração'; checkOutrosViagem();
+    tecnicosSel = new Set();
+    $('modalViagem').classList.remove('hidden');
+    $('listaTecnicos').innerHTML = '<p class="text-xs text-slate-400 text-center py-3"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Carregando técnicos...</p>';
+    await carregarColegas();
+    renderListaTecnicos();
+}
+function fecharModalViagem() { $('modalViagem').classList.add('hidden'); }
+
+function atualizarContTecnicos() { $('contTecnicos').textContent = `(${tecnicosSel.size} selecionado${tecnicosSel.size === 1 ? '' : 's'})`; }
+
+function listaTecnicosVisiveis() {
+    const q = ($('buscaTecnico').value || '').trim().toLowerCase();
+    return colegas.filter(isTecnico).filter(u => (String(u.nome || '') + ' ' + String(u.login || '')).toLowerCase().includes(q));
+}
+
+function renderListaTecnicos() {
+    const box = $('listaTecnicos'); box.innerHTML = '';
+    const lista = listaTecnicosVisiveis();
+    if (!lista.length) { box.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">Nenhum técnico encontrado.</p>'; atualizarContTecnicos(); return; }
+    lista.forEach(u => {
+        const lb = document.createElement('label');
+        lb.className = 'flex items-center gap-2 px-3 py-2 border-b text-sm cursor-pointer hover:bg-slate-50';
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'h-4 w-4 accent-emerald-600'; cb.checked = tecnicosSel.has(u.login);
+        cb.onchange = () => { if (cb.checked) tecnicosSel.add(u.login); else tecnicosSel.delete(u.login); atualizarContTecnicos(); };
+        const sp = document.createElement('span'); sp.innerHTML = `<b>${esc(u.nome)}</b> <span class="text-[11px] text-slate-400 font-mono">${esc(u.login)}</span>`;
+        lb.appendChild(cb); lb.appendChild(sp); box.appendChild(lb);
+    });
+    atualizarContTecnicos();
+}
+
+function selecionarTodosTecnicos() {
+    const vis = listaTecnicosVisiveis();
+    const todos = vis.length && vis.every(u => tecnicosSel.has(u.login));
+    vis.forEach(u => { if (todos) tecnicosSel.delete(u.login); else tecnicosSel.add(u.login); });
+    renderListaTecnicos();
+}
+
+async function confirmarCriarViagemGestao() {
+    const sigla = $('novaViagemSigla').value.trim().toUpperCase();
+    let tipo = $('novaViagemTipo').value;
+    if (tipo === 'Outros') tipo = $('novaViagemOutros').value.trim();
+    const motivo = $('novaViagemMotivo').value.trim() || tipo;
+    const logins = Array.from(tecnicosSel);
+    if (!sigla || !tipo) { showToast('Informe a sigla e a categoria.', 'warning', 'Campo Obrigatório'); return; }
+    if (!logins.length) { showToast('Selecione ao menos um técnico.', 'warning', 'Campo Obrigatório'); return; }
+    const btn = $('btnCriarViagem'); const original = btn.innerHTML; btn.disabled = true;
+    busy++;
+    const falhas = [];
+    try {
+        // Sequencial de propósito: evita gravações simultâneas na planilha (ids duplicados)
+        for (let i = 0; i < logins.length; i++) {
+            btn.innerHTML = `<span class="loader-small"></span> ${i + 1}/${logins.length}`;
+            const login = logins[i];
+            const a = await postAPI({ action: 'initProject', login, sigla, tipoProjeto: tipo });
+            const b = await postAPI({ action: 'createDespesaViagem', sigla, motivo, colaborador: login, criadoPor: userData.login, nivel: userData.nivel });
+            if (!(a && a.success) || !(b && b.success)) falhas.push(login);
+        }
+    } finally { busy--; btn.disabled = false; btn.innerHTML = original; }
+    fecharModalViagem();
+    if (falhas.length) showToast(`Falha ao criar para: ${falhas.map(esc).join(', ')}`, 'error', 'Atenção', 7000);
+    const ok = logins.length - falhas.length;
+    if (ok > 0) showToast(`Viagem ${sigla} criada para ${ok} técnico(s): projeto de horas e despesas abertos.`, 'success', 'Viagem Criada');
+    atualizarDados();
+}
+
+// ===== WORKSPACE =====
 function abrirWorkspace(sigla, tipo) {
     currentProject = { sigla: sigla, tipo: tipo };
-    document.getElementById('workspaceTitle').textContent = `PROJETO: ${sigla}`;
-    document.getElementById('workspaceSubtitle').textContent = `Categoria: ${tipo}`;
+    $('workspaceTitle').textContent = `PROJETO: ${sigla}`;
+    $('workspaceSubtitle').textContent = `Categoria: ${tipo}`;
+    const g = isGestao();
+    ['btnShare', 'btnDelProj', 'btnPDF'].forEach(id => $(id).classList.toggle('hidden', g));
+    $('secApontamento').classList.toggle('hidden', g);
+    $('painelSuporte').classList.toggle('hidden', g);
+    $('painelGestao').classList.toggle('hidden', !g);
+    $('secRegistros').classList.toggle('xl:col-span-8', !g);
+    $('secRegistros').classList.toggle('xl:col-span-12', g);
     showView('dashboardView'); cancelarEdicao(); renderizarWorkspace();
 }
 
@@ -377,67 +627,91 @@ function calcularApontamento(dV, entrada, inicioAlmoco, fimAlmoco, saida, feriad
 }
 
 function cancelarEdicao() {
-    document.getElementById('tripForm').reset(); document.getElementById('editTripId').value = '';
-    document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
-    document.getElementById('btnSalvar').classList.replace('bg-orange-500', 'bg-blue-600');
-    document.getElementById('btnSalvar').classList.replace('hover:bg-orange-600', 'hover:bg-blue-700');
+    $('tripForm').reset(); $('editTripId').value = '';
+    $('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
+    $('btnSalvar').classList.replace('bg-orange-500', 'bg-blue-600');
+    $('btnSalvar').classList.replace('hover:bg-orange-600', 'hover:bg-blue-700');
 }
 
 function carregarParaEdicao(idTrip) {
     const t = allTrips.find(x => x.idViagem === idTrip); if(!t) return;
-    document.getElementById('editTripId').value = t.idViagem;
-    document.getElementById('dataTrabalho').value = t.data.split('T')[0];
-    document.getElementById('hrEntrada').value = t.entrada;
-    document.getElementById('hrInicioAlmoco').value = t.inicioAlmoco || "";
-    document.getElementById('hrFimAlmoco').value = t.fimAlmoco || "";
-    document.getElementById('hrSaida').value = t.saida;
-    document.getElementById('chkFeriado').checked = !!t.feriado;
-    document.getElementById('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento';
-    document.getElementById('btnSalvar').classList.replace('bg-blue-600', 'bg-orange-500');
-    document.getElementById('btnSalvar').classList.replace('hover:bg-blue-700', 'hover:bg-orange-600');
+    $('editTripId').value = t.idViagem;
+    $('dataTrabalho').value = t.data.split('T')[0];
+    $('hrEntrada').value = t.entrada;
+    $('hrInicioAlmoco').value = t.inicioAlmoco || "";
+    $('hrFimAlmoco').value = t.fimAlmoco || "";
+    $('hrSaida').value = t.saida;
+    $('chkFeriado').checked = !!t.feriado;
+    $('btnSalvarTexto').innerHTML = '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento';
+    $('btnSalvar').classList.replace('bg-blue-600', 'bg-orange-500');
+    $('btnSalvar').classList.replace('hover:bg-blue-700', 'hover:bg-orange-600');
     showToast('Registro carregado para edição', 'info', 'Editar');
 }
 
-document.getElementById('tripForm').addEventListener('submit', async (e) => {
+$('tripForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const isEdit = document.getElementById('editTripId').value !== '';
+    const isEdit = $('editTripId').value !== '';
     const btnId = 'btnSalvar'; const msgId = 'msgSalvar';
     const originalText = isEdit ? '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento' : '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
-    document.getElementById(btnId).disabled = true;
-    document.getElementById('btnSalvarTexto').innerHTML = '<span class="loader-small"></span> Aguarde...';
-    const dV = document.getElementById('dataTrabalho').value;
-    const hrEntrada = document.getElementById('hrEntrada').value;
-    const hrSaida = document.getElementById('hrSaida').value;
-    const hrInicioAlmoco = document.getElementById('hrInicioAlmoco').value;
-    const hrFimAlmoco = document.getElementById('hrFimAlmoco').value;
-    const isFeriado = document.getElementById('chkFeriado').checked;
+    $(btnId).disabled = true;
+    $('btnSalvarTexto').innerHTML = '<span class="loader-small"></span> Aguarde...';
+    const dV = $('dataTrabalho').value;
+    const hrEntrada = $('hrEntrada').value;
+    const hrSaida = $('hrSaida').value;
+    const hrInicioAlmoco = $('hrInicioAlmoco').value;
+    const hrFimAlmoco = $('hrFimAlmoco').value;
+    const isFeriado = $('chkFeriado').checked;
     const calc = calcularApontamento(dV, hrEntrada, hrInicioAlmoco, hrFimAlmoco, hrSaida, isFeriado, userData.equipe, userData.nivel);
-    const payload = { action: isEdit ? 'editTrip' : 'saveTrip', idViagem: document.getElementById('editTripId').value, login: userData.login, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo, data: dV, escala: calc.escala, entrada: hrEntrada, inicioAlmoco: hrInicioAlmoco || "", fimAlmoco: hrFimAlmoco || "", saida: hrSaida, totalHoras: minsToTime(calc.minsTrab), horasExtras: minsToTime(calc.mExt), valorHoraExtra: calc.vHora, totalReceber: calc.totalReceber, feriado: isFeriado };
-    const r = await fetchAPI(payload, btnId, 'btnSalvarTexto', msgId, originalText);
-    if(r && r.success) { showToast(isEdit ? 'Registro atualizado!' : 'Apontamento registrado!', 'success', isEdit ? 'Atualizado' : 'Salvo'); cancelarEdicao(); carregarTudo(); setTimeout(() => document.getElementById(msgId).classList.add('hidden'), 3000); }
+    const payload = { action: isEdit ? 'editTrip' : 'saveTrip', idViagem: $('editTripId').value, login: userData.login, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo, data: dV, escala: calc.escala, entrada: hrEntrada, inicioAlmoco: hrInicioAlmoco || "", fimAlmoco: hrFimAlmoco || "", saida: hrSaida, totalHoras: minsToTime(calc.minsTrab), horasExtras: minsToTime(calc.mExt), valorHoraExtra: calc.vHora, totalReceber: calc.totalReceber, feriado: isFeriado };
+    busy++;
+    let r;
+    try { r = await fetchAPI(payload, btnId, 'btnSalvarTexto', msgId, originalText); } finally { busy--; }
+    if(r && r.success) {
+        // atualização imediata na tela (otimista); a sincronização confirma em seguida
+        const idLocal = isEdit ? payload.idViagem : (r.idViagem || r.id || ('tmp_' + Date.now()));
+        const local = Object.assign({}, payload, { idViagem: idLocal, tipo: payload.tipoProjeto });
+        delete local.action;
+        if (isEdit) allTrips = allTrips.map(t => t.idViagem === idLocal ? Object.assign({}, t, local) : t);
+        else allTrips.push(local);
+        showToast(isEdit ? 'Registro atualizado!' : 'Apontamento registrado!', 'success', isEdit ? 'Atualizado' : 'Salvo');
+        cancelarEdicao(); renderizarLojas(); renderizarWorkspace();
+        setTimeout(() => $(msgId).classList.add('hidden'), 3000);
+        atualizarDados();
+    }
 });
 
 async function deletarRegistro(idViagem) {
     const confirmed = await showConfirm('Tem certeza que deseja excluir este registro permanentemente?', { title: 'Excluir Registro', confirmText: 'Sim, Excluir', type: 'danger', icon: 'fa-trash' });
     if(!confirmed) return;
-    const r = await fetchAPI({ action: 'deleteTrip', login: userData.login, idViagem: idViagem }, null, null, null, null);
-    if(r && r.success) { showToast('Registro excluído com sucesso!', 'success', 'Excluído'); carregarTudo(); }
-    else if (r) { showToast(r.message, 'error', 'Erro'); }
+    const backup = allTrips;
+    allTrips = allTrips.filter(t => t.idViagem !== idViagem); rerender();
+    busy++;
+    let r;
+    try { r = await fetchAPI({ action: 'deleteTrip', login: userData.login, idViagem: idViagem }, null, null, null, null); } finally { busy--; }
+    if(r && r.success) { showToast('Registro excluído com sucesso!', 'success', 'Excluído'); atualizarDados(); }
+    else { allTrips = backup; rerender(); showToast((r && r.message) || 'Falha ao excluir.', 'error', 'Erro'); }
 }
 
 async function deletarProjeto() {
     const confirmed = await showConfirm(`Excluir o projeto ${currentProject.sigla} e TODOS os lançamentos dele?<br><br><strong>Esta ação não pode ser desfeita.</strong>`, { title: 'Excluir Projeto Completo', confirmText: 'Sim, Excluir Tudo', type: 'danger', icon: 'fa-trash-can' });
     if(!confirmed) return;
-    const r = await fetchAPI({ action: 'deleteProject', login: userData.login, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo }, null, null, null, null);
-    if(r && r.success) { showToast('Projeto excluído permanentemente!', 'success', 'Projeto Excluído'); voltarParaCategorias(); carregarTudo(); }
-    else if (r) { showToast(r.message, 'error', 'Erro'); }
+    const { sigla, tipo } = currentProject;
+    const backup = allTrips;
+    allTrips = allTrips.filter(t => !(t.sigla === sigla && t.tipo === tipo));
+    renderizarLojas(); voltarParaCategorias();
+    busy++;
+    let r;
+    try { r = await fetchAPI({ action: 'deleteProject', login: userData.login, sigla: sigla, tipoProjeto: tipo }, null, null, null, null); } finally { busy--; }
+    if(r && r.success) { showToast('Projeto excluído permanentemente!', 'success', 'Projeto Excluído'); atualizarDados(); }
+    else { allTrips = backup; rerender(); showToast((r && r.message) || 'Falha ao excluir o projeto.', 'error', 'Erro'); }
 }
 
 function obterDiaSemana(dataString) { const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']; return dias[new Date(dataString + "T00:00:00").getDay()]; }
 
 function renderizarWorkspace() {
-    const tbH = document.getElementById('tbHoras'); const tbF = document.getElementById('tbFinanceiro');
-    tbH.innerHTML = ''; tbF.innerHTML = '';
+    if (isGestao()) return renderizarWorkspaceGestao();
+    const tbH = $('tbHoras'); const tbF = $('tbFinanceiro');
+    let htmlH = '', htmlF = '';
     const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
     let valorTotal = 0;
     if(projTrips.length > 0) {
@@ -452,51 +726,68 @@ function renderizarWorkspace() {
             const taxaExibida = Number(t.valorHoraExtra) * (t.feriado ? 2 : 1);
             const hExt = horasExibicaoAtividades !== '00:00';
             valorTotal += Number(t.totalReceber);
-            tbH.innerHTML += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true"><button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-            tbF.innerHTML += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-center font-mono text-slate-600">${t.horasExtras}</td><td class="px-4 py-3 text-right text-slate-500">R$ ${taxaExibida.toFixed(2).replace('.', ',')}${t.feriado ? ' <span class="text-[10px] text-amber-600 font-bold">(2x)</span>' : ''}</td><td class="px-4 py-3 text-right font-bold text-emerald-600">R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}</td></tr>`;
+            htmlH += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true"><button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+            htmlF += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-center font-mono text-slate-600">${t.horasExtras}</td><td class="px-4 py-3 text-right text-slate-500">R$ ${taxaExibida.toFixed(2).replace('.', ',')}${t.feriado ? ' <span class="text-[10px] text-amber-600 font-bold">(2x)</span>' : ''}</td><td class="px-4 py-3 text-right font-bold text-emerald-600">R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}</td></tr>`;
         });
-        document.getElementById('valorTotalProjeto').textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
+        tbH.innerHTML = htmlH; tbF.innerHTML = htmlF;
+        $('valorTotalProjeto').textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
     } else {
         tbH.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400">Nenhum registro para este projeto.</td></tr>';
         tbF.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400">Nenhuma movimentação.</td></tr>';
-        document.getElementById('valorTotalProjeto').textContent = 'R$ 0,00';
+        $('valorTotalProjeto').textContent = 'R$ 0,00';
     }
 }
 
-function carregarColegas() {
-    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getUsers' }) }).then(r => r.json()).then(d => {
-        if(d.success) { const sel = document.getElementById('shareUserSelect'); sel.innerHTML = '<option value="">Selecione um colega...</option>'; d.users.forEach(u => { if(u.login !== userData.login) sel.innerHTML += `<option value="${u.login}">${u.nome} (${u.login})</option>`; }); }
+// Visão da Coordenação/Gerência: somente acompanhamento (sem valores e sem apontamento)
+function renderizarWorkspaceGestao() {
+    const tb = $('tbGestao');
+    const trips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
+    const tecnicos = new Set(trips.map(t => t._login || t.login));
+    $('gestaoResumo').textContent = `${trips.length} registro(s) • ${tecnicos.size} técnico(s) • atualização automática`;
+    if (!trips.length) { tb.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400">Nenhum apontamento registrado ainda. Assim que um técnico lançar, aparecerá aqui.</td></tr>'; return; }
+    trips.sort((a, b) => (new Date(b.data) - new Date(a.data)) || String(b.entrada).localeCompare(String(a.entrada)));
+    let html = '';
+    trips.forEach(t => {
+        const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
+        const diaSemanaInt = new Date(dateStr + "T00:00:00").getDay();
+        const df = dateStr.split('-').reverse().join('/') + ` (${obterDiaSemana(dateStr)})`;
+        let horas = t.horasExtras;
+        if (diaSemanaInt === 0 && !t.feriado) horas = halveTime(t.horasExtras);
+        const badge = t.feriado ? ' <span class="ml-1 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-300">FERIADO</span>' : '';
+        const pausa = (t.inicioAlmoco && t.fimAlmoco) ? `${esc(t.inicioAlmoco)} / ${esc(t.fimAlmoco)}` : 'Sem pausa';
+        const hExt = horas !== '00:00';
+        html += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm font-bold text-slate-700">${esc(t._nome || t._login || t.login || '—')}</td><td class="px-4 py-3 text-sm text-slate-600">${df}${badge}</td><td class="px-4 py-3 text-center font-mono text-xs text-slate-600">${esc(t.entrada)} - ${pausa} - ${esc(t.saida)}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${esc(t.escala)}</span></td><td class="px-4 py-3 text-center font-bold ${hExt ? 'text-blue-600' : 'text-slate-400'}">${horas}</td></tr>`;
     });
-    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getSharedTrips', login: userData.login }) }).then(r => r.json()).then(d => {
-        const list = document.getElementById('listaCompartilhados'); list.innerHTML = '';
-        if(d.success && d.shared.length > 0) { d.shared.forEach(s => { list.innerHTML += `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2 flex justify-between items-center hover:bg-white hover:border-blue-300 transition group shadow-sm"><div><p class="text-xs font-bold text-slate-800 uppercase">${s.sigla} - ${s.tipoProjeto}</p><p class="text-[10px] text-slate-500 mt-1">Enviado por: <b>${s.remetente}</b> (${s.trips.length} reg.)</p></div><button onclick='usarSharedProject(${JSON.stringify(s)})' class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition">Aproveitar Projeto</button></div>`; }); }
-        else { list.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto recebido.</p>'; }
-    });
+    tb.innerHTML = html;
 }
 
-async function usarSharedProject(sharedData) {
-    const confirmed = await showConfirm(`Importar ${sharedData.trips.length} apontamentos do projeto ${sharedData.sigla}?<br><br>O sistema irá recalcular usando <strong>SUA escala</strong> e <strong>SEU valor/hora</strong>.`, { title: 'Importar Projeto Compartilhado', confirmText: 'Sim, Importar', type: 'info', icon: 'fa-download' });
+// ===== COMPARTILHAMENTO =====
+async function usarSharedProject(idx) {
+    const sharedData = sharedList[idx]; if (!sharedData) return;
+    const confirmed = await showConfirm(`Importar ${sharedData.trips.length} apontamentos do projeto ${esc(sharedData.sigla)}?<br><br>O sistema irá recalcular usando <strong>SUA escala</strong> e <strong>SEU valor/hora</strong>.`, { title: 'Importar Projeto Compartilhado', confirmText: 'Sim, Importar', type: 'info', icon: 'fa-download' });
     if(!confirmed) return;
-    document.getElementById('msgRecebendo').classList.remove('hidden');
+    $('msgRecebendo').classList.remove('hidden');
     const novasViagensRecalculadas = sharedData.trips.map(trip => {
         const dV = trip.data.includes('T') ? trip.data.split('T')[0] : trip.data;
         const feriado = !!trip.feriado;
         const calc = calcularApontamento(dV, trip.entrada, trip.inicioAlmoco, trip.fimAlmoco, trip.saida, feriado, userData.equipe, userData.nivel);
         return { login: userData.login, sigla: sharedData.sigla, tipoProjeto: sharedData.tipoProjeto, data: dV, escala: calc.escala, entrada: trip.entrada, inicioAlmoco: trip.inicioAlmoco || "", fimAlmoco: trip.fimAlmoco || "", saida: trip.saida, totalHoras: minsToTime(calc.minsTrab), horasExtras: minsToTime(calc.mExt), valorHoraExtra: calc.vHora, totalReceber: calc.totalReceber, feriado: feriado };
     });
-    const r = await fetchAPI({ action: 'saveMultipleTrips', trips: novasViagensRecalculadas, idCompartilhamento: sharedData.idShare }, null, null, null, null);
-    document.getElementById('msgRecebendo').classList.add('hidden');
-    if(r && r.success) { showToast('Projeto importado e recalculado com sucesso!', 'success', 'Importação Concluída'); carregarTudo(); carregarColegas(); }
+    busy++;
+    let r;
+    try { r = await fetchAPI({ action: 'saveMultipleTrips', trips: novasViagensRecalculadas, idCompartilhamento: sharedData.idShare }, null, null, null, null); } finally { busy--; }
+    $('msgRecebendo').classList.add('hidden');
+    if(r && r.success) { showToast('Projeto importado e recalculado com sucesso!', 'success', 'Importação Concluída'); atualizarDados(); }
 }
 
-function abrirModalShare() { document.getElementById('modalShare').classList.remove('hidden'); }
-function fecharModalShare() { document.getElementById('modalShare').classList.add('hidden'); document.getElementById('shareUserSelect').value = ''; }
+function abrirModalShare() { preencherSelectShare(); $('modalShare').classList.remove('hidden'); }
+function fecharModalShare() { $('modalShare').classList.add('hidden'); $('shareUserSelect').value = ''; }
 
 async function confirmarShare() {
-    const dest = document.getElementById('shareUserSelect').value;
+    const dest = $('shareUserSelect').value;
     if(!dest) { showToast('Selecione um colega para compartilhar!', 'warning', 'Campo Obrigatório'); return; }
-    const btn = document.getElementById('btnConfirmShare'); btn.innerHTML = 'Enviando...'; btn.disabled = true;
-    await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'shareTrip', remetente: userData.login, destinatario: dest, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo }) });
+    const btn = $('btnConfirmShare'); btn.innerHTML = 'Enviando...'; btn.disabled = true;
+    await postAPI({ action: 'shareTrip', remetente: userData.login, destinatario: dest, sigla: currentProject.sigla, tipoProjeto: currentProject.tipo });
     btn.innerHTML = 'Enviar Projeto'; btn.disabled = false; fecharModalShare();
     showToast('Projeto compartilhado com sucesso!', 'success', 'Compartilhado');
 }
