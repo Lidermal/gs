@@ -119,7 +119,7 @@
                         <option value="">Selecione Equipe...</option><option value="Anna">Equipe Anna</option><option value="Didi">Equipe Didi</option>
                     </select>
                     <select id="regNivel" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
-                        <option value="">Selecione Nível...</option><option value="Suporte NN">Suporte NN</option><option value="Suporte N1">Suporte N1</option><option value="Suporte N2">Suporte N2</option><option value="Suporte N3">Suporte N3</option>
+                        <option value="">Selecione Nível...</option><option value="Suporte NN">Suporte NN</option><option value="Suporte N1">Suporte N1</option><option value="Suporte N2">Suporte N2</option><option value="Suporte N3">Suporte N3</option><option value="Coordenação GS">Coordenação GS</option><option value="Gerência GS">Gerência GS</option>
                     </select>
                     <input type="password" id="regSenha" required placeholder="Crie uma Senha" class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
                     <button type="submit" id="btnRegister" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 rounded mt-4">
@@ -140,6 +140,8 @@
                 <h1 class="text-white font-bold hidden sm:block">Gestão de Viagens | Suporte</h1>
             </div>
             <div class="flex items-center gap-4">
+                <span class="hidden sm:flex items-center gap-1 text-[10px] font-bold text-emerald-400 uppercase" title="Os dados são atualizados automaticamente"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Ao vivo</span>
+                <button onclick="irParaDespesas()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded transition" title="Abrir o sistema de Despesas de Viagens"><i class="fa-solid fa-receipt mr-1"></i> Despesas</button>
                 <div class="text-right hidden md:block cursor-pointer group relative" onclick="abrirPerfil()">
                     <p class="text-sm font-medium text-white group-hover:text-blue-400 transition" id="navUserName"></p>
                     <p class="text-xs text-slate-400" id="navUserRole"></p>
@@ -198,13 +200,16 @@
 
     <!-- LISTA DE PROJETOS -->
     <div id="projectsView" class="hidden min-h-screen container mx-auto p-4 py-8">
-        <div class="flex justify-between items-center mb-8 border-b border-slate-300 pb-4">
+        <div class="flex justify-between items-center mb-8 border-b border-slate-300 pb-4 gap-3 flex-wrap">
             <div>
-                <h2 class="text-2xl font-bold text-slate-800"><i class="fa-solid fa-folder-tree text-blue-600 mr-2"></i> Meus Projetos Ativos</h2>
-                <p class="text-sm text-slate-500 mt-1">Selecione uma loja para gerenciar apontamentos ou inicie um novo projeto.</p>
+                <h2 class="text-2xl font-bold text-slate-800"><i class="fa-solid fa-folder-tree text-blue-600 mr-2"></i> <span id="projetosTitulo">Meus Projetos Ativos</span></h2>
+                <p class="text-sm text-slate-500 mt-1" id="projetosSubtitulo">Selecione uma loja para gerenciar apontamentos ou inicie um novo projeto.</p>
             </div>
-            <button onclick="abrirModalProjeto()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow-lg transition">
+            <button id="btnNovoProjeto" onclick="abrirModalProjeto()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow-lg transition">
                 <i class="fa-solid fa-plus mr-2"></i> Novo Projeto
+            </button>
+            <button id="btnCriarViagemGestao" onclick="abrirModalViagem()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded shadow-lg transition">
+                <i class="fa-solid fa-route mr-2"></i> Criar Viagem
             </button>
         </div>
         
@@ -216,7 +221,7 @@
             <div id="gridNivel2" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
         </div>
 
-        <div class="mt-12 bg-white rounded-xl shadow-sm border overflow-hidden p-6">
+        <div id="blocoCompartilhados" class="mt-12 bg-white rounded-xl shadow-sm border overflow-hidden p-6">
             <h2 class="text-sm font-bold text-purple-900 uppercase mb-4"><i class="fa-solid fa-inbox mr-2"></i> Projetos Compartilhados Comigo</h2>
             <div class="max-h-48 overflow-auto custom-scrollbar" id="listaCompartilhados"></div>
             <div id="msgRecebendo" class="text-sm text-purple-700 font-bold hidden mt-2 text-center"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Processando e recalculando valores do projeto...</div>
@@ -232,14 +237,14 @@
                 <p class="text-sm text-slate-500 font-medium" id="workspaceSubtitle">Categoria: ...</p>
             </div>
             <div class="flex gap-2 flex-wrap">
-                <button onclick="abrirModalShare()" class="bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm px-4 py-2 rounded font-bold shadow-sm transition"><i class="fa-solid fa-share-nodes mr-2"></i> Compartilhar Projeto</button>
-                <button onclick="deletarProjeto()" class="bg-slate-700 hover:bg-slate-800 text-white text-sm px-4 py-2 rounded font-bold shadow transition"><i class="fa-solid fa-trash-can mr-2"></i> Excluir Projeto</button>
-                <button onclick="gerarPDF()" class="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded font-bold shadow transition"><i class="fa-solid fa-file-pdf mr-2"></i> Exportar</button>
+                <button id="btnShare" onclick="abrirModalShare()" class="bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm px-4 py-2 rounded font-bold shadow-sm transition"><i class="fa-solid fa-share-nodes mr-2"></i> Compartilhar Projeto</button>
+                <button id="btnDelProj" onclick="deletarProjeto()" class="bg-slate-700 hover:bg-slate-800 text-white text-sm px-4 py-2 rounded font-bold shadow transition"><i class="fa-solid fa-trash-can mr-2"></i> Excluir Projeto</button>
+                <button id="btnPDF" onclick="gerarPDF()" class="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded font-bold shadow transition"><i class="fa-solid fa-file-pdf mr-2"></i> Exportar</button>
             </div>
         </div>
 
         <main class="grid grid-cols-1 xl:grid-cols-12 gap-6">
-            <section class="xl:col-span-4 space-y-6">
+            <section id="secApontamento" class="xl:col-span-4 space-y-6">
                 <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
                     <div class="bg-slate-50 px-5 py-4 border-b flex justify-between items-center">
                         <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-clock-rotate-left text-blue-500 mr-2"></i> Apontamento de Horas</h2>
@@ -267,44 +272,69 @@
                 </div>
             </section>
 
-            <section class="xl:col-span-8 space-y-6">
-                <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
-                    <div class="bg-slate-50 px-5 py-3 border-b flex justify-between items-center">
-                        <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-list-check text-slate-500 mr-2"></i> Registros de Atividades</h2>
+            <section id="secRegistros" class="xl:col-span-8 space-y-6">
+                <!-- PAINEL DO SUPORTE (horas + financeiro) -->
+                <div id="painelSuporte" class="space-y-6">
+                    <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
+                        <div class="bg-slate-50 px-5 py-3 border-b flex justify-between items-center">
+                            <h2 class="text-sm font-bold text-slate-800 uppercase"><i class="fa-solid fa-list-check text-slate-500 mr-2"></i> Registros de Atividades</h2>
+                        </div>
+                        <div class="overflow-auto custom-scrollbar flex-1 p-0">
+                            <table class="min-w-full text-sm text-left" id="tableHorasHtml">
+                                <thead class="bg-slate-100 sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Data</th>
+                                        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Escala Base</th>
+                                        <th class="px-4 py-3 font-bold text-blue-600 uppercase text-[10px] text-center">Horas Extras</th>
+                                        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center" data-pdf-ignore="true">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbHoras" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="overflow-auto custom-scrollbar flex-1 p-0">
-                        <table class="min-w-full text-sm text-left" id="tableHorasHtml">
-                            <thead class="bg-slate-100 sticky top-0">
-                                <tr>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Data</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Escala Base</th>
-                                    <th class="px-4 py-3 font-bold text-blue-600 uppercase text-[10px] text-center">Horas Extras</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center" data-pdf-ignore="true">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tbHoras" class="divide-y divide-slate-100"></tbody>
-                        </table>
+
+                    <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
+                        <div class="bg-slate-800 px-5 py-3 border-b border-slate-900"><h2 class="text-sm font-bold text-white uppercase"><i class="fa-solid fa-wallet text-emerald-400 mr-2"></i> Previsão Financeira</h2></div>
+                        <div class="overflow-auto custom-scrollbar flex-1 p-0 flex flex-col">
+                            <table class="min-w-full text-sm text-left flex-1" id="tableFinHtml">
+                                <thead class="bg-slate-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Data</th>
+                                        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center">Balanço Extra</th>
+                                        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-right">Taxa (R$)</th>
+                                        <th class="px-4 py-3 font-bold text-emerald-600 uppercase text-[10px] text-right">Provisão Diária</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbFinanceiro" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                        <div class="bg-[#1e293b] px-6 py-4 flex justify-between items-center text-white">
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Acumulado (Neste Projeto)</span>
+                            <span class="text-xl font-bold text-emerald-400" id="valorTotalProjeto">R$ 0,00</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm border flex flex-col h-[320px]">
-                    <div class="bg-slate-800 px-5 py-3 border-b border-slate-900"><h2 class="text-sm font-bold text-white uppercase"><i class="fa-solid fa-wallet text-emerald-400 mr-2"></i> Previsão Financeira</h2></div>
-                    <div class="overflow-auto custom-scrollbar flex-1 p-0 flex flex-col">
-                        <table class="min-w-full text-sm text-left flex-1" id="tableFinHtml">
-                            <thead class="bg-slate-50 sticky top-0">
+                <!-- PAINEL DA GESTÃO (somente acompanhamento, sem valores) -->
+                <div id="painelGestao" class="hidden bg-white rounded-xl shadow-sm border flex flex-col" style="height:calc(100vh - 260px);min-height:380px;">
+                    <div class="bg-slate-800 px-5 py-3 border-b border-slate-900 flex justify-between items-center flex-wrap gap-2">
+                        <h2 class="text-sm font-bold text-white uppercase"><i class="fa-solid fa-satellite-dish text-emerald-400 mr-2"></i> Acompanhamento ao Vivo</h2>
+                        <span class="text-[11px] font-bold text-emerald-300" id="gestaoResumo"></span>
+                    </div>
+                    <div class="overflow-auto custom-scrollbar flex-1">
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="bg-slate-100 sticky top-0">
                                 <tr>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Técnico</th>
                                     <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Data</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center">Balanço Extra</th>
-                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-right">Taxa (R$)</th>
-                                    <th class="px-4 py-3 font-bold text-emerald-600 uppercase text-[10px] text-right">Provisão Diária</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center">Entrada / Pausa / Saída</th>
+                                    <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Escala</th>
+                                    <th class="px-4 py-3 font-bold text-blue-600 uppercase text-[10px] text-center">Horas Extras</th>
                                 </tr>
                             </thead>
-                            <tbody id="tbFinanceiro" class="divide-y divide-slate-100"></tbody>
+                            <tbody id="tbGestao" class="divide-y divide-slate-100"></tbody>
                         </table>
-                    </div>
-                    <div class="bg-[#1e293b] px-6 py-4 flex justify-between items-center text-white">
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Acumulado (Neste Projeto)</span>
-                        <span class="text-xl font-bold text-emerald-400" id="valorTotalProjeto">R$ 0,00</span>
                     </div>
                 </div>
             </section>
@@ -336,6 +366,48 @@
             <div class="flex justify-end gap-2 mt-6">
                 <button onclick="fecharModalProjeto()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
                 <button onclick="criarProjeto()" class="px-4 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded shadow">Continuar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CRIAR VIAGEM (Coordenação / Gerência) -->
+    <div id="modalViagem" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center fade-in p-4">
+        <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-md border-t-4 border-emerald-600 max-h-[95vh] overflow-y-auto">
+            <h3 class="text-lg font-bold text-slate-800 mb-1"><i class="fa-solid fa-route text-emerald-600 mr-2"></i> Criar Viagem</h3>
+            <p class="text-[11px] text-slate-500 mb-4">Cria o projeto de horas <b>e</b> a viagem de despesas para cada técnico selecionado.</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">SIGLA DA LOJA</label>
+                    <input type="text" id="novaViagemSigla" maxlength="3" placeholder="Ex: PIN" class="w-full px-3 py-2 text-sm border rounded uppercase bg-slate-50">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">CATEGORIA DO SERVIÇO</label>
+                    <select id="novaViagemTipo" onchange="checkOutrosViagem()" class="w-full px-3 py-2 text-sm border rounded bg-slate-50 mb-2">
+                        <option value="Inauguração">Inauguração</option>
+                        <option value="Reinauguração">Reinauguração</option>
+                        <option value="Pc-á-pc">Pc-á-pc</option>
+                        <option value="Impressoras">Impressoras</option>
+                        <option value="Networking">Networking</option>
+                        <option value="Outros">Outros...</option>
+                    </select>
+                    <input type="text" id="novaViagemOutros" placeholder="Especifique a categoria..." class="hidden w-full px-3 py-2 text-sm border rounded bg-white">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">MOTIVO (opcional - padrão: categoria)</label>
+                    <input type="text" id="novaViagemMotivo" placeholder="Ex: Troca de Servidor" class="w-full px-3 py-2 text-sm border rounded bg-slate-50">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-[10px] font-bold text-slate-500">TÉCNICOS <span id="contTecnicos" class="text-emerald-600">(0 selecionados)</span></label>
+                        <button type="button" onclick="selecionarTodosTecnicos()" class="text-[10px] font-bold text-blue-600 hover:text-blue-800">Marcar / desmarcar visíveis</button>
+                    </div>
+                    <input type="text" id="buscaTecnico" oninput="renderListaTecnicos()" placeholder="Buscar técnico..." class="w-full px-3 py-2 text-sm border rounded bg-slate-50 mb-2">
+                    <div id="listaTecnicos" class="max-h-48 overflow-auto custom-scrollbar border rounded"></div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button onclick="fecharModalViagem()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
+                <button onclick="confirmarCriarViagemGestao()" id="btnCriarViagem" class="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded shadow">Criar</button>
             </div>
         </div>
     </div>
