@@ -5,11 +5,20 @@ const valoresHora = { "Suporte NN": 9.09, "Suporte N1": 12.96, "Suporte N2": 15.
 const TEMPO_SESSAO_MS = 4 * 60 * 60 * 1000; // 4 HORAS
 const POLL_SUPORTE_MS = 8000;
 const POLL_GESTAO_MS = 10000;
-const ST_ARQ = ['FECHADA', 'ARQUIVADA', 'CANCELADO'];
+const ST_ARQ = ['FECHADA', 'ARQUIVADA', 'CANCELADO'];   // status de DESPESA (usado só para evitar duplicidade ao criar viagem)
+const ST_HFECH = ['FECHADA', 'ARQUIVADA'];              // status do projeto de HORAS considerados fechados
+
+// Ações da Coordenação/Gerência sobre o projeto de horas
+const ACOES_PROJ = {
+    fechar:      { para: 'FECHADA',   de: 'ABERTO',    txt: 'Fechar',      icon: 'fa-lock',      cls: 'bg-emerald-600 hover:bg-emerald-700' },
+    reabrir:     { para: 'ABERTO',    de: 'FECHADA',   txt: 'Reabrir',     icon: 'fa-lock-open', cls: 'bg-amber-500 hover:bg-amber-600' },
+    arquivar:    { para: 'ARQUIVADA', de: 'FECHADA',   txt: 'Arquivar',    icon: 'fa-box-archive', cls: 'bg-slate-700 hover:bg-slate-800' },
+    desarquivar: { para: 'FECHADA',   de: 'ARQUIVADA', txt: 'Desarquivar', icon: 'fa-box-open',  cls: 'bg-blue-600 hover:bg-blue-700' }
+};
 
 let userData = null;
 let allTrips = [];
-let despesasList = [];     // status das viagens de despesas (para arquivar projetos fechados)
+let despesasList = [];     // status das viagens de despesas (informativo + evitar duplicidade)
 let colegas = [];
 let sharedList = [];
 let currentProject = { sigla: '', tipo: '' };
@@ -329,11 +338,11 @@ function aplicarPerfil() {
     $('blocoCompartilhados').classList.toggle('hidden', g);
     $('projetosTitulo').textContent = g ? 'Viagens em Andamento' : 'Meus Projetos Ativos';
     $('projetosSubtitulo').textContent = g
-        ? 'Acompanhe ao vivo os apontamentos de horas dos técnicos ou crie uma nova viagem.'
+        ? 'Acompanhe ao vivo os apontamentos de horas dos técnicos, feche/reabra projetos ou crie uma nova viagem.'
         : 'Selecione uma loja para gerenciar apontamentos ou inicie um novo projeto.';
 }
 
-// ===== ABAS: ATIVOS x ARQUIVADOS =====
+// ===== ABAS: ATIVOS x FECHADOS/ARQUIVADOS =====
 function garantirAbas() {
     if ($('abasProjetos')) return;
     const div = document.createElement('div');
@@ -347,19 +356,29 @@ function setAbaProjetos(a) {
     renderizarLojas();
 }
 
-// Projeto arquivado = todas as despesas de viagem (da mesma loja) dos técnicos envolvidos estão fechadas/arquivadas
+// ===== STATUS DO PROJETO DE HORAS (fonte: coluna statusProjeto vinda do servidor) =====
+function loginDoTrip(t) { return low(t._login || t.login || (userData && userData.login)); }
+
+// Status do projeto (sigla+tipo). Com 'login' olha só aquele técnico; sem, qualquer registro do projeto.
+function statusDoProjeto(sigla, tipo, login) {
+    const L = login ? low(login) : null;
+    const sts = allTrips.filter(t => t.sigla === sigla && t.tipo === tipo && (!L || loginDoTrip(t) === L)).map(t => t.statusProjeto).filter(Boolean);
+    return sts[0] || 'ABERTO';
+}
+function projetoFechadoSuporte() {
+    if (isGestao() || !currentProject.sigla || !currentProject.tipo) return false;
+    return ST_HFECH.includes(statusDoProjeto(currentProject.sigla, currentProject.tipo));
+}
+
 function loginsDoProjeto(sigla, tipo) {
     if (!isGestao()) return [low(userData.login)];
     return Array.from(new Set(allTrips.filter(t => t.sigla === sigla && t.tipo === tipo).map(t => low(t._login || t.login)).filter(Boolean)));
 }
+// Projeto "fechado/arquivado" = TODOS os técnicos do projeto estão com as horas fechadas/arquivadas
 function projetoArquivado(sigla, tipo) {
     const logins = loginsDoProjeto(sigla, tipo);
     if (!logins.length) return false;
-    const S = String(sigla).toUpperCase();
-    return logins.every(l => {
-        const ds = despesasList.filter(d => String(d.sigla).toUpperCase() === S && low(d.colaborador) === l);
-        return ds.length > 0 && ds.every(d => ST_ARQ.includes(d.status));
-    });
+    return logins.every(l => ST_HFECH.includes(statusDoProjeto(sigla, tipo, l)));
 }
 // retorna lista de pares únicos {sigla,tipo,arquivado}
 function paresProjetos() {
@@ -488,7 +507,7 @@ function renderCompartilhados(lista) {
     });
 }
 
-// ===== LOJAS / CATEGORIAS (com abas Ativos x Arquivados) =====
+// ===== LOJAS / CATEGORIAS (com abas Ativos x Fechados/Arquivados) =====
 function renderizarLojas() {
     garantirAbas();
     const grid1 = $('level1Projects');
@@ -499,11 +518,11 @@ function renderizarLojas() {
         const on = abaProjetos === id;
         return `<button onclick="setAbaProjetos('${id}')" class="px-4 py-2.5 text-sm font-bold -mb-px border-b-2 transition ${on ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}"><i class="fa-solid ${icon} mr-2"></i>${txt} <span class="ml-1 text-[10px] px-2 py-0.5 rounded-full ${on ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}">${n}</span></button>`;
     };
-    $('abasProjetos').innerHTML = aba('ATIVOS', 'fa-layer-group', 'Ativos', ativos.length) + aba('ARQUIVADOS', 'fa-box-archive', 'Arquivados', arqs.length);
+    $('abasProjetos').innerHTML = aba('ATIVOS', 'fa-layer-group', 'Ativos', ativos.length) + aba('ARQUIVADOS', 'fa-box-archive', 'Fechados / Arquivados', arqs.length);
 
     const doTab = abaProjetos === 'ARQUIVADOS' ? arqs : ativos;
     if (doTab.length === 0) {
-        const msgVazio = abaProjetos === 'ARQUIVADOS' ? 'Nenhum projeto arquivado.<br>Viagens fechadas aparecem aqui.' : ('Nenhum projeto ativo.<br>' + (isGestao() ? 'Clique em "Criar Viagem" para começar.' : 'Clique em "Novo Projeto" para começar.'));
+        const msgVazio = abaProjetos === 'ARQUIVADOS' ? 'Nenhum projeto fechado ou arquivado.<br>Projetos fechados pela coordenação aparecem aqui.' : ('Nenhum projeto ativo.<br>' + (isGestao() ? 'Clique em "Criar Viagem" para começar.' : 'Clique em "Novo Projeto" para começar.'));
         grid1.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10 bg-white rounded border border-dashed border-slate-300"><i class="fa-solid ${abaProjetos === 'ARQUIVADOS' ? 'fa-box-archive' : 'fa-folder-open'} text-4xl mb-3"></i><br>${msgVazio}</div>`;
         return;
     }
@@ -548,7 +567,7 @@ function abrirLoja(sigla) {
         const tripsReais = allTrips.filter(t => t.sigla === sigla && t.tipo === tipo && !t.isInit).length;
         const labelReg = tripsReais > 0 ? `${tripsReais} reg.` : 'Novo';
         const tecs = isGestao() ? `<p class="text-[11px] text-slate-500 mt-2 line-clamp-2"><i class="fa-solid fa-users mr-1 text-slate-400"></i>${Array.from(categorias[tipo]).map(esc).join(', ')}</p>` : '';
-        html += `<div onclick="abrirWorkspace('${sigla}', '${tipo}')" class="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-center mb-3"><div class="${arq ? 'text-slate-400' : 'text-blue-500'} group-hover:text-blue-700 transition"><i class="fa-solid ${arq ? 'fa-box-archive' : 'fa-folder-open'} text-2xl"></i></div><span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${labelReg}</span></div><h4 class="text-sm font-bold text-slate-800 truncate" title="${esc(tipo)}">${esc(tipo)}</h4>${tecs}<p class="text-[10px] text-slate-400 mt-2 uppercase">${isGestao() ? 'Acompanhar ao vivo' : 'Entrar no Workspace'}</p></div>`;
+        html += `<div onclick="abrirWorkspace('${sigla}', '${tipo}')" class="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-center mb-3"><div class="${arq ? 'text-slate-400' : 'text-blue-500'} group-hover:text-blue-700 transition"><i class="fa-solid ${arq ? 'fa-box-archive' : 'fa-folder-open'} text-2xl"></i></div><span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${labelReg}</span></div><h4 class="text-sm font-bold text-slate-800 truncate" title="${esc(tipo)}">${esc(tipo)}</h4>${tecs}<p class="text-[10px] text-slate-400 mt-2 uppercase">${isGestao() ? 'Acompanhar / gerenciar' : (arq ? 'Ver (somente leitura)' : 'Entrar no Workspace')}</p></div>`;
     });
     grid2.innerHTML = html;
 }
@@ -573,7 +592,7 @@ async function criarProjeto() {
     } finally { busy--; }
     await atualizarDados();
     showToast(`Projeto ${sigla} - ${tipo} criado com sucesso!`, 'success', 'Novo Projeto');
-    abaProjetos = 'ATIVOS';
+    abaProjetos = projetoArquivado(sigla, tipo) ? 'ARQUIVADOS' : 'ATIVOS';
     abrirWorkspace(sigla, tipo);
 }
 
@@ -678,6 +697,26 @@ function abrirWorkspace(sigla, tipo) {
     showView('dashboardView'); cancelarEdicao(); renderizarWorkspace();
 }
 
+// Trava do suporte: projeto fechado/arquivado = somente leitura
+function aplicarTravaWorkspace() {
+    if (isGestao()) return;
+    const fechado = projetoFechadoSuporte();
+    $('secApontamento').classList.toggle('hidden', fechado);
+    $('btnDelProj').classList.toggle('hidden', fechado);
+    $('secRegistros').classList.toggle('xl:col-span-8', !fechado);
+    $('secRegistros').classList.toggle('xl:col-span-12', fechado);
+    let b = $('bannerFechado');
+    if (!b) {
+        b = document.createElement('div');
+        b.id = 'bannerFechado';
+        b.className = 'hidden bg-amber-50 border border-amber-300 text-amber-800 rounded-xl px-5 py-4 text-sm font-semibold flex items-start gap-3';
+        $('painelSuporte').parentNode.insertBefore(b, $('painelSuporte'));
+    }
+    b.classList.toggle('hidden', !fechado);
+    b.innerHTML = '<i class="fa-solid fa-lock mt-0.5"></i><div>Este projeto foi fechado pela Coordenação/Gerência.<br><span class="font-normal text-xs">Você pode consultar e exportar o relatório, mas não pode adicionar, editar ou excluir lançamentos.</span></div>';
+    if (fechado) cancelarEdicao();
+}
+
 function determinarEscala(equipe, dataViagemStr) {
     const d = new Date(dataViagemStr + "T00:00:00");
     let cycleYear = d.getFullYear(); let cycleMonth = d.getMonth();
@@ -726,6 +765,7 @@ function cancelarEdicao() {
 }
 
 function carregarParaEdicao(idTrip) {
+    if (projetoFechadoSuporte()) { showToast('Projeto fechado pela Coordenação/Gerência.', 'warning', 'Bloqueado'); return; }
     const t = allTrips.find(x => x.idViagem === idTrip); if(!t) return;
     $('editTripId').value = t.idViagem;
     $('dataTrabalho').value = t.data.split('T')[0];
@@ -742,6 +782,7 @@ function carregarParaEdicao(idTrip) {
 
 $('tripForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (projetoFechadoSuporte()) { showToast('Projeto fechado pela Coordenação/Gerência. Não é possível alterar.', 'warning', 'Bloqueado'); return; }
     const isEdit = $('editTripId').value !== '';
     const btnId = 'btnSalvar'; const msgId = 'msgSalvar';
     const originalText = isEdit ? '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento' : '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
@@ -768,10 +809,14 @@ $('tripForm').addEventListener('submit', async (e) => {
         cancelarEdicao(); renderizarLojas(); renderizarWorkspace();
         setTimeout(() => $(msgId).classList.add('hidden'), 3000);
         atualizarDados();
+    } else if (r && r.message) {
+        // servidor recusou (ex.: projeto fechado): força atualização para refletir o bloqueio
+        lastSig = ''; atualizarDados();
     }
 });
 
 async function deletarRegistro(idViagem) {
+    if (projetoFechadoSuporte()) { showToast('Projeto fechado pela Coordenação/Gerência.', 'warning', 'Bloqueado'); return; }
     const confirmed = await showConfirm('Tem certeza que deseja excluir este registro permanentemente?', { title: 'Excluir Registro', confirmText: 'Sim, Excluir', type: 'danger', icon: 'fa-trash' });
     if(!confirmed) return;
     const backup = allTrips;
@@ -780,10 +825,11 @@ async function deletarRegistro(idViagem) {
     let r;
     try { r = await fetchAPI({ action: 'deleteTrip', login: userData.login, idViagem: idViagem }, null, null, null, null); } finally { busy--; }
     if(r && r.success) { showToast('Registro excluído com sucesso!', 'success', 'Excluído'); atualizarDados(); }
-    else { allTrips = backup; rerender(); showToast((r && r.message) || 'Falha ao excluir.', 'error', 'Erro'); }
+    else { allTrips = backup; rerender(); showToast((r && r.message) || 'Falha ao excluir.', 'error', 'Erro'); lastSig = ''; atualizarDados(); }
 }
 
 async function deletarProjeto() {
+    if (projetoFechadoSuporte()) { showToast('Projeto fechado pela Coordenação/Gerência.', 'warning', 'Bloqueado'); return; }
     const confirmed = await showConfirm(`Excluir o projeto ${currentProject.sigla} e TODOS os lançamentos dele?<br><br><strong>Esta ação não pode ser desfeita.</strong>`, { title: 'Excluir Projeto Completo', confirmText: 'Sim, Excluir Tudo', type: 'danger', icon: 'fa-trash-can' });
     if(!confirmed) return;
     const { sigla, tipo } = currentProject;
@@ -794,13 +840,15 @@ async function deletarProjeto() {
     let r;
     try { r = await fetchAPI({ action: 'deleteProject', login: userData.login, sigla: sigla, tipoProjeto: tipo }, null, null, null, null); } finally { busy--; }
     if(r && r.success) { showToast('Projeto excluído permanentemente!', 'success', 'Projeto Excluído'); atualizarDados(); }
-    else { allTrips = backup; rerender(); showToast((r && r.message) || 'Falha ao excluir o projeto.', 'error', 'Erro'); }
+    else { allTrips = backup; rerender(); showToast((r && r.message) || 'Falha ao excluir o projeto.', 'error', 'Erro'); lastSig = ''; atualizarDados(); }
 }
 
 function obterDiaSemana(dataString) { const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']; return dias[new Date(dataString + "T00:00:00").getDay()]; }
 
 function renderizarWorkspace() {
     if (isGestao()) return renderizarWorkspaceGestao();
+    aplicarTravaWorkspace();
+    const trava = projetoFechadoSuporte();
     const tbH = $('tbHoras'); const tbF = $('tbFinanceiro');
     let htmlH = '', htmlF = '';
     const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
@@ -817,7 +865,10 @@ function renderizarWorkspace() {
             const taxaExibida = Number(t.valorHoraExtra) * (t.feriado ? 2 : 1);
             const hExt = horasExibicaoAtividades !== '00:00';
             valorTotal += Number(t.totalReceber);
-            htmlH += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true"><button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+            const acoes = trava
+                ? '<span class="text-slate-300" title="Projeto fechado"><i class="fa-solid fa-lock"></i></span>'
+                : `<button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button>`;
+            htmlH += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true">${acoes}</td></tr>`;
             htmlF += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-center font-mono text-slate-600">${t.horasExtras}</td><td class="px-4 py-3 text-right text-slate-500">R$ ${taxaExibida.toFixed(2).replace('.', ',')}${t.feriado ? ' <span class="text-[10px] text-amber-600 font-bold">(2x)</span>' : ''}</td><td class="px-4 py-3 text-right font-bold text-emerald-600">R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}</td></tr>`;
         });
         tbH.innerHTML = htmlH; tbF.innerHTML = htmlF;
@@ -852,13 +903,95 @@ function tecnicosDoProjeto() {
     allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo).forEach(t => {
         const login = t._login || t.login;
         if (!login) return;
-        if (!mapa[login]) mapa[login] = { login, nome: t._nome || login, trips: [] };
+        if (!mapa[login]) mapa[login] = { login, nome: t._nome || login, trips: [], status: 'ABERTO' };
+        if (t.statusProjeto) mapa[login].status = t.statusProjeto;
         if (!t.isInit) mapa[login].trips.push(t);
     });
     return Object.values(mapa).sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
 }
 
 function setFiltroTecnico(login) { filtroTecnico = login; renderizarWorkspaceGestao(); }
+
+// ----- selos e botões da Coordenação/Gerência -----
+function badgeHoras(st) {
+    const m = {
+        ABERTO: ['Aberto', 'bg-blue-100 text-blue-700 border-blue-200', 'fa-folder-open'],
+        FECHADA: ['Fechado', 'bg-emerald-100 text-emerald-700 border-emerald-200', 'fa-lock'],
+        ARQUIVADA: ['Arquivado', 'bg-slate-200 text-slate-600 border-slate-300', 'fa-box-archive']
+    }[st] || ['Aberto', 'bg-blue-100 text-blue-700 border-blue-200', 'fa-folder-open'];
+    return `<span class="${m[1]} text-[10px] font-bold px-2 py-0.5 rounded border uppercase"><i class="fa-solid ${m[2]} mr-1"></i>Horas: ${m[0]}</span>`;
+}
+function badgeDespesaTec(sigla, login) {
+    const S = String(sigla).toUpperCase(), L = low(login);
+    const ds = despesasList.filter(d => String(d.sigla).toUpperCase() === S && low(d.colaborador) === L);
+    if (!ds.length) return '<span class="text-[10px] font-bold text-slate-400 uppercase border border-dashed rounded px-2 py-0.5">Sem despesa</span>';
+    return `<span class="bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded uppercase"><i class="fa-solid fa-receipt mr-1"></i>Despesa: ${ds.map(d => esc(d.status)).join(', ')}</span>`;
+}
+function btnAcaoHtml(acao, logins, extra) {
+    const c = ACOES_PROJ[acao];
+    return `<button onclick="acaoProjetoGestao('${acao}','${esc(logins.join(','))}')" class="${c.cls} text-white text-[11px] font-bold py-1.5 px-3 rounded shadow transition whitespace-nowrap"><i class="fa-solid ${c.icon} mr-1"></i>${c.txt}${extra || ''}</button>`;
+}
+function btnExcluirHtml(logins, extra) {
+    return `<button onclick="acaoProjetoGestao('excluir','${esc(logins.join(','))}')" class="bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold py-1.5 px-3 rounded shadow transition whitespace-nowrap"><i class="fa-solid fa-trash mr-1"></i>Excluir${extra || ''}</button>`;
+}
+function botoesPorStatus(st, logins) {
+    let h = '';
+    if (st === 'ABERTO') h += btnAcaoHtml('fechar', logins);
+    else if (st === 'FECHADA') h += btnAcaoHtml('reabrir', logins) + btnAcaoHtml('arquivar', logins);
+    else if (st === 'ARQUIVADA') h += btnAcaoHtml('desarquivar', logins);
+    return h + btnExcluirHtml(logins);
+}
+
+// Fechar / reabrir / arquivar / desarquivar / excluir o projeto de horas (um ou vários técnicos)
+async function acaoProjetoGestao(acao, loginsCsv) {
+    if (!isGestao()) return;
+    const logins = String(loginsCsv || '').split(',').filter(Boolean);
+    if (!logins.length) return;
+    const { sigla, tipo } = currentProject;
+    const tecs = tecnicosDoProjeto();
+    const nomes = logins.map(l => (tecs.find(t => t.login === l) || {}).nome || l).join(', ');
+    const excluir = acao === 'excluir';
+    const cfg = ACOES_PROJ[acao];
+    if (!excluir && !cfg) return;
+
+    const msg = excluir
+        ? `Excluir o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> e TODOS os lançamentos de horas de: ${esc(nomes)}?<br><br><strong>Esta ação não pode ser desfeita.</strong>`
+        : (acao === 'reabrir'
+            ? `Reabrir o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> de: ${esc(nomes)}?<br><br>O técnico voltará a poder lançar e editar horas.`
+            : acao === 'desarquivar'
+                ? `Desarquivar o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> de: ${esc(nomes)}?<br><br>Ele volta para <b>Fechado</b> (você pode reabri-lo depois).`
+                : `${cfg.txt} o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> de: ${esc(nomes)}?`);
+    const ok = await showConfirm(msg, {
+        title: excluir ? 'Excluir Projeto' : `${cfg.txt} Projeto`,
+        confirmText: excluir ? 'Sim, Excluir' : `Sim, ${cfg.txt}`,
+        type: excluir ? 'danger' : 'info',
+        icon: excluir ? 'fa-trash-can' : cfg.icon
+    });
+    if (!ok) return;
+
+    const alvo = t => t.sigla === sigla && t.tipo === tipo && logins.includes(t._login || t.login);
+    // atualização otimista
+    if (excluir) allTrips = allTrips.filter(t => !alvo(t));
+    else allTrips = allTrips.map(t => alvo(t) ? Object.assign({}, t, { statusProjeto: cfg.para }) : t);
+    rerender();
+
+    busy++;
+    const falhas = [];
+    try {
+        for (const l of logins) {
+            const r = excluir
+                ? await postAPI({ action: 'deleteProject', login: l, sigla, tipoProjeto: tipo, nivel: userData.nivel })
+                : await postAPI({ action: 'updateProjetoStatus', login: l, sigla, tipoProjeto: tipo, status: cfg.para, nivel: userData.nivel });
+            if (!(r && r.success)) falhas.push(l);
+        }
+    } finally { busy--; }
+
+    if (falhas.length) showToast(`Falha em: ${falhas.map(esc).join(', ')}`, 'error', 'Atenção', 7000);
+    else showToast(excluir ? 'Projeto excluído.' : `Projeto: ${cfg.para === 'ABERTO' ? 'reaberto' : cfg.para === 'FECHADA' ? 'fechado' : 'arquivado'}.`, 'success', 'Concluído');
+    lastSig = '';                 // força sincronizar com a verdade do servidor
+    await atualizarDados();
+    if (excluir && !tecnicosDoProjeto().length) voltarParaCategorias();
+}
 
 function renderizarWorkspaceGestao() {
     let box = $('gestaoConteudo');
@@ -878,6 +1011,11 @@ function renderizarWorkspaceGestao() {
     // chips de filtro
     const chip = (id, txt, on) => `<button onclick="setFiltroTecnico('${esc(id)}')" class="${on ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border'} px-3 py-1.5 rounded-full font-bold text-xs shadow-sm transition whitespace-nowrap">${esc(txt)}</button>`;
     let html = `<div class="flex gap-2 flex-wrap items-center"><span class="text-[10px] font-bold uppercase text-slate-400 mr-1">Técnico:</span>${chip('TODOS', `Todos (${todos.length})`, filtroTecnico === 'TODOS')}${todos.map(t => chip(t.login, t.nome, filtroTecnico === t.login)).join('')}</div>`;
+
+    // ações em lote (sobre os técnicos exibidos)
+    const por = st => exibidos.filter(t => t.status === st).map(t => t.login);
+    const lote = (acao) => { const l = por(ACOES_PROJ[acao].de); return l.length ? btnAcaoHtml(acao, l, ` (${l.length})`) : ''; };
+    html += `<div class="flex gap-2 flex-wrap items-center bg-slate-50 border rounded-lg px-3 py-2"><span class="text-[10px] font-bold uppercase text-slate-400 mr-1">Ações em lote:</span>${lote('fechar')}${lote('reabrir')}${lote('arquivar')}${lote('desarquivar')}${exibidos.length ? btnExcluirHtml(exibidos.map(t => t.login), ` (${exibidos.length})`) : ''}</div>`;
 
     // faixa de resumo geral
     const geral = resumoTrips([].concat(...exibidos.map(t => t.trips)));
@@ -907,6 +1045,7 @@ function renderizarWorkspaceGestao() {
               <div class="hidden sm:block text-[11px] text-slate-500 leading-tight">Regulares <b class="font-mono text-slate-700">${minsToTime(r.reg)}</b><br>Domingo <b class="font-mono text-slate-700">${minsToTime(r.dom)}</b> • Feriado <b class="font-mono text-amber-600">${minsToTime(r.fer)}</b></div>
               <div><p class="text-[10px] uppercase font-bold text-slate-400">Horas extras</p><p class="text-xl font-black text-blue-600 font-mono leading-none">${minsToTime(r.total)}</p></div>
             </div>
+            <div class="w-full flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">${badgeHoras(tec.status)}${badgeDespesaTec(currentProject.sigla, tec.login)}<div class="flex flex-wrap gap-2 ml-auto">${botoesPorStatus(tec.status, [tec.login])}</div></div>
           </div>
           <div class="overflow-auto custom-scrollbar max-h-72"><table class="min-w-full text-sm text-left"><thead class="bg-white sticky top-0 border-b"><tr><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Data</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px] text-center">Entrada / Pausa / Saída</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Escala</th><th class="px-4 py-2 font-bold text-blue-600 uppercase text-[10px] text-center">Horas Extras</th></tr></thead><tbody class="divide-y divide-slate-100">${linhas}</tbody></table></div>
         </div>`;
@@ -920,6 +1059,9 @@ function renderizarWorkspaceGestao() {
 // ===== COMPARTILHAMENTO =====
 async function usarSharedProject(idx) {
     const sharedData = sharedList[idx]; if (!sharedData) return;
+    if (ST_HFECH.includes(statusDoProjeto(sharedData.sigla, sharedData.tipoProjeto, userData.login))) {
+        showToast('Você já tem este projeto e ele está fechado pela Coordenação/Gerência.', 'warning', 'Bloqueado'); return;
+    }
     const confirmed = await showConfirm(`Importar ${sharedData.trips.length} apontamentos do projeto ${esc(sharedData.sigla)}?<br><br>O sistema irá recalcular usando <strong>SUA escala</strong> e <strong>SEU valor/hora</strong>.`, { title: 'Importar Projeto Compartilhado', confirmText: 'Sim, Importar', type: 'info', icon: 'fa-download' });
     if(!confirmed) return;
     $('msgRecebendo').classList.remove('hidden');
@@ -934,6 +1076,7 @@ async function usarSharedProject(idx) {
     try { r = await fetchAPI({ action: 'saveMultipleTrips', trips: novasViagensRecalculadas, idCompartilhamento: sharedData.idShare }, null, null, null, null); } finally { busy--; }
     $('msgRecebendo').classList.add('hidden');
     if(r && r.success) { showToast('Projeto importado e recalculado com sucesso!', 'success', 'Importação Concluída'); atualizarDados(); }
+    else { showToast((r && r.message) || 'Não foi possível importar o projeto.', 'error', 'Erro'); }
 }
 
 function abrirModalShare() { preencherSelectShare(); $('modalShare').classList.remove('hidden'); }
