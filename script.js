@@ -1,7 +1,15 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyv6rztF_a5ePHzRhzCMJDawDOHhF-le_3MgvoeMY2WUGjVRQBPmt2cSuV6Mp71MGnpUQ/exec";
 const DESPESAS_URL = "https://despesas-gs.vercel.app/";
 // Suporte N1 reajustado: R$ 2.851,31 / 220h mensais (44h semanais) = R$ 12,9605 -> R$ 12,96
-const valoresHora = { "Suporte NN": 9.09, "Suporte N1": 12.96, "Suporte N2": 15.91, "Suporte N3": 19.44 };
+// Analista de Suporte (N1 e N2): base R$ 4.537,20 / 220h mensais = R$ 20,6236 -> R$ 20,62
+const valoresHora = {
+    "Suporte NN": 9.09,
+    "Suporte N1": 12.96,
+    "Suporte N2": 15.91,
+    "Suporte N3": 19.44,
+    "Analista de Suporte - N1": 20.62,
+    "Analista de Suporte N2": 20.62
+};
 const TEMPO_SESSAO_MS = 4 * 60 * 60 * 1000; // 4 HORAS
 const POLL_SUPORTE_MS = 8000;
 const POLL_GESTAO_MS = 10000;
