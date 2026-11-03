@@ -10,6 +10,13 @@ const valoresHora = {
     "Analista de Suporte - N1": 20.62,
     "Analista de Suporte N2": 20.62
 };
+// ===== REGRA DE DOMINGO / FERIADO TRABALHADO =====
+// Independente das horas trabalhadas (menos ou mais de 8h), o recebimento é fixo:
+// 8h x 2 (dobro) = 16h pagas. A hora extra "feita" continua sendo exibida como foi registrada.
+const MIN_BASE_DOM_FER = 8 * 60;   // 8h
+const MULT_DOM_FER = 2;            // dobro
+const MIN_RECEBER_DOM_FER = MIN_BASE_DOM_FER * MULT_DOM_FER; // 16h
+
 const TEMPO_SESSAO_MS = 4 * 60 * 60 * 1000; // 4 HORAS
 const POLL_SUPORTE_MS = 8000;
 const POLL_GESTAO_MS = 10000;
@@ -45,6 +52,26 @@ function isGestao() { return !!userData && RX_GESTAO.test(userData.nivel || '');
 function isTecnico(u) { return !RX_GESTAO.test(u.nivel || ''); }
 function low(s) { return String(s == null ? '' : s).toLowerCase(); }
 function dataSo(t) { const d = String(t.data || ''); return d.includes('T') ? d.split('T')[0] : d; }
+
+// ===== HORAS EXTRAS: FEITAS x A RECEBER =====
+// No banco, o domingo fica guardado com as horas já dobradas e o feriado com as horas reais.
+// Por isso "minsFeitos" devolve SEMPRE a hora extra literal (a que o técnico realmente fez),
+// e "minsReceber" aplica a regra de 8h x 2 = 16h para domingo/feriado.
+// Como tudo é calculado na hora de exibir, os registros antigos também seguem a nova regra.
+function diaSemanaTrip(t) { return new Date(dataSo(t) + 'T00:00:00').getDay(); }
+function ehDomingoSemFeriado(t) { return !t.feriado && diaSemanaTrip(t) === 0; }
+function diaEspecial(t) { return !!t.feriado || diaSemanaTrip(t) === 0; }
+function minsFeitos(t) {
+    const s = timeToMins(t.horasExtras);
+    return ehDomingoSemFeriado(t) ? Math.round(s / 2) : s;
+}
+function minsReceber(t) {
+    const feitos = minsFeitos(t);
+    if (diaEspecial(t)) return feitos > 0 ? MIN_RECEBER_DOM_FER : 0;
+    return feitos;
+}
+function valorReceber(t) { return (minsReceber(t) / 60) * (Number(t.valorHoraExtra) || 0); }
+function fmtMoeda(v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
 
 // ===== LOGIN ÚNICO ENTRE SISTEMAS (recebe a sessão vinda do despesas-gs) =====
 (function consumirSSO() {
@@ -742,11 +769,12 @@ function getMinutosPrevistos(escala, dStr) {
     return (dia <= 4) ? 540 : (dia === 5 ? 480 : 0);
 }
 
-function timeToMins(t) { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function timeToMins(t) { if (!t) return 0; const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); }
 function minsToTime(m) { return `${m<0?"-":""}${String(Math.floor(Math.abs(m)/60)).padStart(2,'0')}:${String(Math.floor(Math.abs(m)%60)).padStart(2,'0')}`; }
 function halveTime(timeStr) { if (!timeStr || timeStr === "00:00") return "00:00"; return minsToTime(timeToMins(timeStr) / 2); }
 
-// Feriado: TODAS as horas trabalhadas contam como extra e o valor a receber é dobrado.
+// Armazenamento (planilha) continua como antes: domingo guarda as horas dobradas, feriado guarda as horas reais.
+// O que muda é o VALOR A RECEBER: domingo/feriado trabalhado = 8h x 2 = 16h, independente das horas feitas.
 function calcularApontamento(dV, entrada, inicioAlmoco, fimAlmoco, saida, feriado, equipe, nivel) {
     let minsTrab = 0;
     if (inicioAlmoco && fimAlmoco && inicioAlmoco !== "00:00" && fimAlmoco !== "00:00") minsTrab = (timeToMins(inicioAlmoco) - timeToMins(entrada)) + (timeToMins(saida) - timeToMins(fimAlmoco));
@@ -761,8 +789,9 @@ function calcularApontamento(dV, entrada, inicioAlmoco, fimAlmoco, saida, feriad
         if (diaSemana === 0) mExt = mExt * 2;
     }
     const vHora = valoresHora[nivel] || 0;
-    const multiplicador = feriado ? 2 : 1;
-    return { escala, minsTrab, mExt, vHora, totalReceber: (mExt / 60) * vHora * multiplicador };
+    const especial = feriado || diaSemana === 0;
+    const minsReceberCalc = especial ? (mExt > 0 ? MIN_RECEBER_DOM_FER : 0) : mExt;
+    return { escala, minsTrab, mExt, vHora, minsReceber: minsReceberCalc, totalReceber: (minsReceberCalc / 60) * vHora };
 }
 
 function cancelarEdicao() {
@@ -853,9 +882,24 @@ async function deletarProjeto() {
 
 function obterDiaSemana(dataString) { const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']; return dias[new Date(dataString + "T00:00:00").getDay()]; }
 
+// Cabeçalho da Previsão Financeira (5 colunas: feita x a receber)
+function garantirCabecalhoFinanceiro() {
+    const th = document.querySelector('#tableFinHtml thead');
+    if (!th || th.dataset.v === '2') return;
+    th.innerHTML = `<tr>
+        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px]">Data</th>
+        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-center">Hora Extra Feita</th>
+        <th class="px-4 py-3 font-bold text-blue-600 uppercase text-[10px] text-center">Hora Extra a Receber</th>
+        <th class="px-4 py-3 font-bold text-slate-500 uppercase text-[10px] text-right">Taxa (R$)</th>
+        <th class="px-4 py-3 font-bold text-emerald-600 uppercase text-[10px] text-right">Provisão Diária</th>
+    </tr>`;
+    th.dataset.v = '2';
+}
+
 function renderizarWorkspace() {
     if (isGestao()) return renderizarWorkspaceGestao();
     aplicarTravaWorkspace();
+    garantirCabecalhoFinanceiro();
     const trava = projetoFechadoSuporte();
     const tbH = $('tbHoras'); const tbF = $('tbFinanceiro');
     let htmlH = '', htmlF = '';
@@ -864,47 +908,44 @@ function renderizarWorkspace() {
     if(projTrips.length > 0) {
         projTrips.sort((a, b) => new Date(b.data) - new Date(a.data));
         projTrips.forEach(t => {
-            const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
-            const diaSemanaInt = new Date(dateStr + "T00:00:00").getDay();
+            const dateStr = dataSo(t);
             const df = dateStr.split('-').reverse().join('/') + ` (${obterDiaSemana(dateStr)})`;
-            let horasExibicaoAtividades = t.horasExtras;
-            if (diaSemanaInt === 0 && !t.feriado) horasExibicaoAtividades = halveTime(t.horasExtras);
+            const feitos = minsFeitos(t), receber = minsReceber(t), especial = diaEspecial(t);
+            const horasFeitasTxt = minsToTime(feitos), horasReceberTxt = minsToTime(receber);
             const badgeFeriado = t.feriado ? ' <span class="ml-1 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-300">FERIADO</span>' : '';
-            const taxaExibida = Number(t.valorHoraExtra) * (t.feriado ? 2 : 1);
-            const hExt = horasExibicaoAtividades !== '00:00';
-            valorTotal += Number(t.totalReceber);
+            const hExt = feitos > 0;
+            const valorDia = valorReceber(t);
+            valorTotal += valorDia;
             const acoes = trava
                 ? '<span class="text-slate-300" title="Projeto fechado"><i class="fa-solid fa-lock"></i></span>'
                 : `<button onclick="carregarParaEdicao('${t.idViagem}')" class="text-slate-400 hover:text-orange-500 transition" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="deletarRegistro('${t.idViagem}')" class="text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button>`;
-            htmlH += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${t.escala}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasExibicaoAtividades}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true">${acoes}</td></tr>`;
-            htmlF += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-center font-mono text-slate-600">${t.horasExtras}</td><td class="px-4 py-3 text-right text-slate-500">R$ ${taxaExibida.toFixed(2).replace('.', ',')}${t.feriado ? ' <span class="text-[10px] text-amber-600 font-bold">(2x)</span>' : ''}</td><td class="px-4 py-3 text-right font-bold text-emerald-600">R$ ${Number(t.totalReceber).toFixed(2).replace('.', ',')}</td></tr>`;
+            const tagFixo = (especial && receber > 0) ? ' <span class="text-[10px] text-amber-600 font-bold" title="Domingo/feriado: 8h x 2">(8h x 2)</span>' : '';
+            htmlH += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${esc(t.escala)}</span></td><td class="px-4 py-3 text-center font-bold ${hExt?'text-blue-600':'text-slate-400'}">${horasFeitasTxt}</td><td class="px-4 py-3 text-center space-x-3" data-pdf-ignore="true">${acoes}</td></tr>`;
+            htmlF += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-3 text-sm text-slate-600">${df}${badgeFeriado}</td><td class="px-4 py-3 text-center font-mono text-slate-600">${horasFeitasTxt}</td><td class="px-4 py-3 text-center font-mono font-bold ${especial && receber > 0 ? 'text-blue-600' : 'text-slate-600'}">${horasReceberTxt}${tagFixo}</td><td class="px-4 py-3 text-right text-slate-500">${fmtMoeda(t.valorHoraExtra)}</td><td class="px-4 py-3 text-right font-bold text-emerald-600">${fmtMoeda(valorDia)}</td></tr>`;
         });
         tbH.innerHTML = htmlH; tbF.innerHTML = htmlF;
-        $('valorTotalProjeto').textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
+        $('valorTotalProjeto').textContent = fmtMoeda(valorTotal);
     } else {
         tbH.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400">Nenhum registro para este projeto.</td></tr>';
-        tbF.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-400">Nenhuma movimentação.</td></tr>';
+        tbF.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400">Nenhuma movimentação.</td></tr>';
         $('valorTotalProjeto').textContent = 'R$ 0,00';
     }
 }
 
 // ===== VISÃO DA COORDENAÇÃO/GERÊNCIA: organizada por técnico =====
-// horas extras: regulares / domingo (exibe metade, pois o valor guardado é dobrado) / feriado
+// Resumo de horas extras: "feitas" (literais) x "a receber" (domingo/feriado = 8h x 2 = 16h por dia)
 function resumoTrips(list) {
-    let reg = 0, dom = 0, fer = 0;
+    let reg = 0, dom = 0, fer = 0, domR = 0, ferR = 0;
     list.forEach(t => {
-        const ds = dataSo(t);
-        const dow = new Date(ds + 'T00:00:00').getDay();
-        if (t.feriado) fer += timeToMins(t.horasExtras);
-        else if (dow === 0) dom += timeToMins(halveTime(t.horasExtras));
-        else reg += timeToMins(t.horasExtras);
+        const f = minsFeitos(t), r = minsReceber(t);
+        if (t.feriado) { fer += f; ferR += r; }
+        else if (diaSemanaTrip(t) === 0) { dom += f; domR += r; }
+        else reg += f;
     });
-    return { reg, dom, fer, total: reg + dom + fer, dias: list.length };
+    return { reg, dom, fer, total: reg + dom + fer, domR, ferR, rec: reg + domR + ferR, dias: list.length };
 }
-function horasExibicao(t) {
-    const dow = new Date(dataSo(t) + 'T00:00:00').getDay();
-    return (dow === 0 && !t.feriado) ? halveTime(t.horasExtras) : t.horasExtras;
-}
+function horasExibicao(t) { return minsToTime(minsFeitos(t)); }
+function horasReceberExibicao(t) { return minsToTime(minsReceber(t)); }
 
 function tecnicosDoProjeto() {
     const mapa = {};
@@ -1028,22 +1069,25 @@ function renderizarWorkspaceGestao() {
     // faixa de resumo geral
     const geral = resumoTrips([].concat(...exibidos.map(t => t.trips)));
     const tile = (lbl, val, cor) => `<div class="bg-slate-50 border rounded-lg px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">${lbl}</p><p class="text-xl font-black ${cor} font-mono">${val}</p></div>`;
-    html += `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">${tile('Total horas extras', minsToTime(geral.total), 'text-blue-600')}${tile('Regulares', minsToTime(geral.reg), 'text-slate-700')}${tile('Domingos', minsToTime(geral.dom), 'text-slate-700')}${tile('Feriados', minsToTime(geral.fer), 'text-amber-600')}</div>`;
+    html += `<div class="grid grid-cols-2 md:grid-cols-5 gap-3">${tile('Extras feitas', minsToTime(geral.total), 'text-blue-600')}${tile('Regulares', minsToTime(geral.reg), 'text-slate-700')}${tile('Domingos', minsToTime(geral.dom), 'text-slate-700')}${tile('Feriados', minsToTime(geral.fer), 'text-amber-600')}${tile('Extras a receber', minsToTime(geral.rec), 'text-emerald-600')}</div>`;
+    html += `<p class="text-[11px] text-slate-400 -mt-2"><i class="fa-solid fa-circle-info mr-1"></i>Domingo e feriado trabalhados são pagos como 8h x 2 = 16h por dia, independente das horas feitas.</p>`;
 
     // um cartão por técnico
     exibidos.forEach(tec => {
         const trips = tec.trips.slice().sort((a, b) => (new Date(b.data) - new Date(a.data)) || String(b.entrada).localeCompare(String(a.entrada)));
         const r = resumoTrips(trips);
         let linhas = '';
-        if (!trips.length) linhas = '<tr><td colspan="4" class="p-6 text-center text-slate-400 text-sm">Nenhum apontamento lançado ainda.</td></tr>';
+        if (!trips.length) linhas = '<tr><td colspan="5" class="p-6 text-center text-slate-400 text-sm">Nenhum apontamento lançado ainda.</td></tr>';
         trips.forEach(t => {
             const ds = dataSo(t);
             const df = ds.split('-').reverse().join('/') + ` (${obterDiaSemana(ds)})`;
             const horas = horasExibicao(t);
+            const horasRec = horasReceberExibicao(t);
             const badge = t.feriado ? ' <span class="ml-1 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-300">FERIADO</span>' : '';
             const pausa = (t.inicioAlmoco && t.fimAlmoco) ? `${esc(t.inicioAlmoco)} / ${esc(t.fimAlmoco)}` : 'Sem pausa';
-            const hExt = horas !== '00:00';
-            linhas += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-2.5 text-sm text-slate-600">${df}${badge}</td><td class="px-4 py-2.5 text-center font-mono text-xs text-slate-600">${esc(t.entrada)} - ${pausa} - ${esc(t.saida)}</td><td class="px-4 py-2.5 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${esc(t.escala)}</span></td><td class="px-4 py-2.5 text-center font-bold ${hExt ? 'text-blue-600' : 'text-slate-400'}">${horas}</td></tr>`;
+            const hExt = minsFeitos(t) > 0;
+            const esp = diaEspecial(t) && minsReceber(t) > 0;
+            linhas += `<tr class="hover:bg-slate-50 border-b transition-colors"><td class="px-4 py-2.5 text-sm text-slate-600">${df}${badge}</td><td class="px-4 py-2.5 text-center font-mono text-xs text-slate-600">${esc(t.entrada)} - ${pausa} - ${esc(t.saida)}</td><td class="px-4 py-2.5 text-xs"><span class="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">${esc(t.escala)}</span></td><td class="px-4 py-2.5 text-center font-bold ${hExt ? 'text-blue-600' : 'text-slate-400'}">${horas}</td><td class="px-4 py-2.5 text-center font-bold font-mono ${esp ? 'text-emerald-600' : 'text-slate-500'}">${horasRec}${esp ? ' <span class="text-[10px] text-amber-600">(8h x 2)</span>' : ''}</td></tr>`;
         });
         html += `<div class="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           <div class="bg-slate-50 px-4 py-3 border-b flex flex-wrap items-center justify-between gap-3">
@@ -1051,11 +1095,12 @@ function renderizarWorkspaceGestao() {
               <div><p class="text-sm font-bold text-slate-800 leading-tight">${esc(tec.nome)}</p><p class="text-[11px] text-slate-400 font-mono">${esc(tec.login)} • ${r.dias} dia(s) lançado(s)</p></div></div>
             <div class="flex items-center gap-4 text-right">
               <div class="hidden sm:block text-[11px] text-slate-500 leading-tight">Regulares <b class="font-mono text-slate-700">${minsToTime(r.reg)}</b><br>Domingo <b class="font-mono text-slate-700">${minsToTime(r.dom)}</b> • Feriado <b class="font-mono text-amber-600">${minsToTime(r.fer)}</b></div>
-              <div><p class="text-[10px] uppercase font-bold text-slate-400">Horas extras</p><p class="text-xl font-black text-blue-600 font-mono leading-none">${minsToTime(r.total)}</p></div>
+              <div><p class="text-[10px] uppercase font-bold text-slate-400">Extras feitas</p><p class="text-xl font-black text-blue-600 font-mono leading-none">${minsToTime(r.total)}</p></div>
+              <div><p class="text-[10px] uppercase font-bold text-slate-400">A receber</p><p class="text-xl font-black text-emerald-600 font-mono leading-none">${minsToTime(r.rec)}</p></div>
             </div>
             <div class="w-full flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">${badgeHoras(tec.status)}${badgeDespesaTec(currentProject.sigla, tec.login)}<div class="flex flex-wrap gap-2 ml-auto">${botoesPorStatus(tec.status, [tec.login])}</div></div>
           </div>
-          <div class="overflow-auto custom-scrollbar max-h-72"><table class="min-w-full text-sm text-left"><thead class="bg-white sticky top-0 border-b"><tr><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Data</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px] text-center">Entrada / Pausa / Saída</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Escala</th><th class="px-4 py-2 font-bold text-blue-600 uppercase text-[10px] text-center">Horas Extras</th></tr></thead><tbody class="divide-y divide-slate-100">${linhas}</tbody></table></div>
+          <div class="overflow-auto custom-scrollbar max-h-72"><table class="min-w-full text-sm text-left"><thead class="bg-white sticky top-0 border-b"><tr><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Data</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px] text-center">Entrada / Pausa / Saída</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Escala</th><th class="px-4 py-2 font-bold text-blue-600 uppercase text-[10px] text-center">Extra Feita</th><th class="px-4 py-2 font-bold text-emerald-600 uppercase text-[10px] text-center">Extra a Receber</th></tr></thead><tbody class="divide-y divide-slate-100">${linhas}</tbody></table></div>
         </div>`;
     });
     // preserva scroll ao atualizar ao vivo
@@ -1118,8 +1163,8 @@ async function gerarPDFGestao() {
     const alvo = (filtroTecnico === 'TODOS' ? todos : todos.filter(t => t.login === filtroTecnico)).filter(t => t.trips.length > 0);
     if (!alvo.length) { showToast('Não há apontamentos para exportar.', 'warning', 'Sem dados'); return; }
 
-    const incluirSomadas = await showConfirm(
-        'Deseja incluir a coluna "Horas somadas" (domingo e feriado contados em dobro) no resumo?',
+    const incluirReceber = await showConfirm(
+        'Deseja incluir as colunas de "Horas a Receber" (domingo e feriado trabalhados = 8h x 2 = 16h por dia)?',
         { title: 'Opções do Relatório', confirmText: 'Sim, Incluir', cancelText: 'Não, Apenas Extras', type: 'info', icon: 'fa-file-pdf' }
     );
 
@@ -1172,12 +1217,13 @@ async function gerarPDFGestao() {
 
     // ---- Resumo por técnico ----
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(30, 41, 59); doc.text('Resumo por Técnico', 14, y);
-    const linhasResumo = alvo.map(t => { const r = resumoTrips(t.trips); const row = [t.nome, String(r.dias), minsToTime(r.reg), minsToTime(r.dom), minsToTime(r.fer), minsToTime(r.total)]; if (incluirSomadas) row.push(minsToTime(r.total + r.dom + r.fer)); return row; });
+    const linhasResumo = alvo.map(t => { const r = resumoTrips(t.trips); const row = [t.nome, String(r.dias), minsToTime(r.reg), minsToTime(r.dom), minsToTime(r.fer), minsToTime(r.total)]; if (incluirReceber) row.push(minsToTime(r.rec)); return row; });
     const G = resumoTrips(todasTrips);
-    const rodape = ['TOTAL GERAL', String(G.dias), minsToTime(G.reg), minsToTime(G.dom), minsToTime(G.fer), minsToTime(G.total)]; if (incluirSomadas) rodape.push(minsToTime(G.total + G.dom + G.fer));
-    const cabResumo = ['Técnico', 'Dias', 'Regulares', 'Domingo', 'Feriado', 'Total Extras']; if (incluirSomadas) cabResumo.push('Horas Somadas');
+    const rodape = ['TOTAL GERAL', String(G.dias), minsToTime(G.reg), minsToTime(G.dom), minsToTime(G.fer), minsToTime(G.total)]; if (incluirReceber) rodape.push(minsToTime(G.rec));
+    const cabResumo = ['Técnico', 'Dias', 'Regulares', 'Domingo', 'Feriado', 'Extras Feitas']; if (incluirReceber) cabResumo.push('A Receber');
     const colEst = { 0: { halign: 'left', fontStyle: 'bold' } }; for (let i = 1; i < cabResumo.length; i++) colEst[i] = { halign: 'center', font: 'courier' };
     colEst[5] = { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [37, 99, 235] };
+    if (incluirReceber) colEst[6] = { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [5, 150, 105] };
     doc.autoTable({
         startY: y + 3, head: [cabResumo], body: linhasResumo, foot: [rodape], theme: 'grid',
         styles: { fontSize: 9, cellPadding: 3.5, lineColor: [203, 213, 225], lineWidth: 0.1 },
@@ -1185,7 +1231,13 @@ async function gerarPDFGestao() {
         footStyles: { fillColor: [219, 234, 254], textColor: [30, 64, 175], fontStyle: 'bold', halign: 'center', font: 'courier' },
         columnStyles: colEst, alternateRowStyles: { fillColor: [248, 250, 252] }, margin: { left: 14, right: 14 }
     });
-    y = doc.lastAutoTable.finalY + 10;
+    y = doc.lastAutoTable.finalY + 4;
+    if (incluirReceber) {
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+        doc.text('Domingo e feriado trabalhados são pagos como 8h x 2 = 16h por dia, independente das horas feitas.', 14, y + 2);
+        y += 6;
+    }
+    y += 6;
 
     // ---- Detalhamento por técnico ----
     alvo.forEach(tec => {
@@ -1194,19 +1246,25 @@ async function gerarPDFGestao() {
         doc.setFillColor(30, 41, 59); doc.roundedRect(14, y, W - 28, 9, 1.5, 1.5, 'F');
         doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text(tec.nome, 18, y + 6);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(147, 197, 253);
-        doc.text(`${tec.login}  |  ${r.dias} dia(s)  |  Total extras: ${minsToTime(r.total)}`, W - 18, y + 6, { align: 'right' });
+        doc.text(`${tec.login}  |  ${r.dias} dia(s)  |  Extras feitas: ${minsToTime(r.total)}${incluirReceber ? '  |  A receber: ' + minsToTime(r.rec) : ''}`, W - 18, y + 6, { align: 'right' });
 
         const trips = tec.trips.slice().sort((a, b) => new Date(a.data) - new Date(b.data));
         const corpo = trips.map(t => {
             const ds = dataSo(t);
             const pausa = (t.inicioAlmoco && t.fimAlmoco) ? `${t.inicioAlmoco} / ${t.fimAlmoco}` : 'Sem pausa';
-            return [`${fmtD(ds)} (${obterDiaSemana(ds)})${t.feriado ? ' - FERIADO' : ''}`, `${t.entrada} - ${pausa} - ${t.saida}`, t.escala || '', t.totalHoras || '-', horasExibicao(t)];
+            const row = [`${fmtD(ds)} (${obterDiaSemana(ds)})${t.feriado ? ' - FERIADO' : ''}`, `${t.entrada} - ${pausa} - ${t.saida}`, t.escala || '', t.totalHoras || '-', horasExibicao(t)];
+            if (incluirReceber) row.push(horasReceberExibicao(t));
+            return row;
         });
+        const cabDet = ['Data', 'Entrada - Pausa / Retorno - Saída', 'Escala', 'Trabalhadas', 'Extra Feita']; if (incluirReceber) cabDet.push('A Receber');
+        const colDet = incluirReceber
+            ? { 0: { cellWidth: 38 }, 1: { halign: 'center', font: 'courier' }, 2: { halign: 'center', cellWidth: 26 }, 3: { halign: 'center', font: 'courier', cellWidth: 20 }, 4: { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [37, 99, 235], cellWidth: 20 }, 5: { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [5, 150, 105], cellWidth: 20 } }
+            : { 0: { cellWidth: 42 }, 1: { halign: 'center', font: 'courier' }, 2: { halign: 'center', cellWidth: 30 }, 3: { halign: 'center', font: 'courier', cellWidth: 24 }, 4: { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [37, 99, 235], cellWidth: 26 } };
         doc.autoTable({
-            startY: y + 11, head: [['Data', 'Entrada - Pausa / Retorno - Saída', 'Escala', 'Trabalhadas', 'Horas Extras']], body: corpo, theme: 'grid',
-            styles: { fontSize: 8.5, cellPadding: 3, lineColor: [203, 213, 225], lineWidth: 0.1 },
+            startY: y + 11, head: [cabDet], body: corpo, theme: 'grid',
+            styles: { fontSize: incluirReceber ? 8 : 8.5, cellPadding: 3, lineColor: [203, 213, 225], lineWidth: 0.1 },
             headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 8 },
-            columnStyles: { 0: { cellWidth: 42 }, 1: { halign: 'center', font: 'courier' }, 2: { halign: 'center', cellWidth: 30 }, 3: { halign: 'center', font: 'courier', cellWidth: 24 }, 4: { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [37, 99, 235], cellWidth: 26 } },
+            columnStyles: colDet,
             alternateRowStyles: { fillColor: [248, 250, 252] }, margin: { left: 14, right: 14 }
         });
         y = doc.lastAutoTable.finalY + 10;
@@ -1241,8 +1299,8 @@ async function gerarPDFGestao() {
 async function gerarPDF() {
     if (isGestao()) return gerarPDFGestao();
 
-    const includeSomadas = await showConfirm(
-        'Deseja incluir a linha "TOTAL HORAS SOMADAS" no relatório?',
+    const includeReceber = await showConfirm(
+        'Deseja incluir a coluna "Horas a Receber" e o total correspondente no relatório? (domingo e feriado trabalhados = 8h x 2 = 16h por dia)',
         { title: 'Opções do Relatório', confirmText: 'Sim, Incluir', cancelText: 'Não, Apenas Extras', type: 'info', icon: 'fa-file-pdf' }
     );
 
@@ -1258,44 +1316,41 @@ async function gerarPDF() {
     const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
     projTrips.sort((a, b) => new Date(a.data) - new Date(b.data));
 
-    let minRegulares = 0, minDomingoReal = 0, minFeriado = 0;
+    const R = resumoTrips(projTrips);
 
     const tableData = projTrips.map(t => {
-        const dateStr = t.data.includes('T') ? t.data.split('T')[0] : t.data;
+        const dateStr = dataSo(t);
         const df = dateStr.split('-').reverse().join('/');
-        const diaSemanaInt = new Date(dateStr + "T00:00:00").getDay();
         const diaSemanaStr = obterDiaSemana(dateStr);
-        let horasParaTabela = t.horasExtras;
-        let minsExtraCalculo = timeToMins(t.horasExtras);
-        if (t.feriado) { minFeriado += minsExtraCalculo; }
-        else if (diaSemanaInt === 0) { horasParaTabela = halveTime(t.horasExtras); minDomingoReal += timeToMins(horasParaTabela); }
-        else { minRegulares += minsExtraCalculo; }
         const pausaTexto = (t.inicioAlmoco && t.fimAlmoco) ? `${t.inicioAlmoco} / ${t.fimAlmoco}` : 'Sem Pausa';
-        return [`${df} (${diaSemanaStr})${t.feriado ? ' - FERIADO' : ''}`, `${t.entrada} - ${pausaTexto} - ${t.saida}`, horasParaTabela];
+        const row = [`${df} (${diaSemanaStr})${t.feriado ? ' - FERIADO' : ''}`, `${t.entrada} - ${pausaTexto} - ${t.saida}`, horasExibicao(t)];
+        if (includeReceber) row.push(horasReceberExibicao(t));
+        return row;
     });
+
+    const cabecalho = ['Data', 'Horários (Entrada - Pausa / Retorno - Saída)', 'Extra Feita']; if (includeReceber) cabecalho.push('Extra a Receber');
+    const colunas = includeReceber
+        ? { 0: { cellWidth: 40, halign: 'center' }, 1: { cellWidth: 80, halign: 'center', font: 'courier' }, 2: { cellWidth: 28, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] }, 3: { cellWidth: 32, halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] } }
+        : { 0: { cellWidth: 45, halign: 'center' }, 1: { cellWidth: 100, halign: 'center', font: 'courier' }, 2: { cellWidth: 35, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] } };
 
     doc.autoTable({
         startY: 35,
-        head: [['Data', 'Horários (Entrada - Pausa / Retorno - Saída)', 'Horas Extras']],
+        head: [cabecalho],
         body: tableData,
         theme: 'grid',
         styles: { fontSize: 9, cellPadding: 4, lineColor: [203, 213, 225], lineWidth: 0.1 },
         headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
-        columnStyles: { 0: { cellWidth: 45, halign: 'center' }, 1: { cellWidth: 100, halign: 'center', font: 'courier' }, 2: { cellWidth: 35, halign: 'center', fontStyle: 'bold', textColor: [37, 99, 235] } },
+        columnStyles: colunas,
         alternateRowStyles: { fillColor: [248, 250, 252] }
     });
 
-    const totalMinsExtras = minRegulares + minDomingoReal + minFeriado;
     const summaryData = [
-        ['TOTAL HORAS REGULARES', minsToTime(minRegulares)],
-        ['TOTAL HORAS DOMINGO', minsToTime(minDomingoReal)],
-        ['TOTAL HORAS FERIADO', minsToTime(minFeriado)],
-        ['TOTAL HORAS EXTRAS', minsToTime(totalMinsExtras)]
+        ['TOTAL HORAS REGULARES', minsToTime(R.reg)],
+        ['TOTAL HORAS DOMINGO', minsToTime(R.dom)],
+        ['TOTAL HORAS FERIADO', minsToTime(R.fer)],
+        ['TOTAL HORAS EXTRAS FEITAS', minsToTime(R.total)]
     ];
-    if (includeSomadas) {
-        const totalMinsSomadas = totalMinsExtras + minDomingoReal + minFeriado;
-        summaryData.push(['TOTAL HORAS SOMADAS', minsToTime(totalMinsSomadas)]);
-    }
+    if (includeReceber) summaryData.push(['TOTAL HORAS A RECEBER', minsToTime(R.rec)]);
 
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 10,
@@ -1303,15 +1358,20 @@ async function gerarPDF() {
         theme: 'grid',
         styles: { fontSize: 9, cellPadding: 4, lineColor: [203, 213, 225], lineWidth: 0.1 },
         columnStyles: {
-            0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 55 },
+            0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 65 },
             1: { halign: 'center', font: 'courier', fontStyle: 'bold', textColor: [37, 99, 235], cellWidth: 20 }
         },
-        margin: { left: 121, right: 14 }
+        margin: { left: 111, right: 14 }
     });
+
+    if (includeReceber) {
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+        doc.text('Domingo e feriado trabalhados são pagos como 8h x 2 = 16h por dia, independente das horas feitas.', 14, doc.lastAutoTable.finalY + 6);
+    }
 
     const pageCount = doc.internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
-        doc.setPage(i); doc.setFontSize(8); doc.setTextColor(148, 163, 184);
+        doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(148, 163, 184);
         doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')} | Página ${i} de ${pageCount}`, 105, doc.internal.pageSize.height - 10, { align: 'center' });
     }
 
