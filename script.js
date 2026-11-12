@@ -1,5 +1,5 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbyv6rztF_a5ePHzRhzCMJDawDOHhF-le_3MgvoeMY2WUGjVRQBPmt2cSuV6Mp71MGnpUQ/exec";
-const DESPESAS_URL = "https://despesas-gs.vercel.app/";
+const DASHBOARD_URL = "https://despesas-gs.vercel.app/";   // o dashboard vive no projeto despesas-gs
 // Suporte N1 reajustado: R$ 2.851,31 / 220h mensais (44h semanais) = R$ 12,9605 -> R$ 12,96
 // Analista de Suporte (N1 e N2): base R$ 4.537,20 / 220h mensais = R$ 20,6236 -> R$ 20,62
 const valoresHora = {
@@ -20,7 +20,6 @@ const MIN_RECEBER_DOM_FER = MIN_BASE_DOM_FER * MULT_DOM_FER; // 16h
 const TEMPO_SESSAO_MS = 4 * 60 * 60 * 1000; // 4 HORAS
 const POLL_SUPORTE_MS = 8000;
 const POLL_GESTAO_MS = 10000;
-const ST_ARQ = ['FECHADA', 'ARQUIVADA', 'CANCELADO'];   // status de DESPESA (usado só para evitar duplicidade ao criar viagem)
 const ST_HFECH = ['FECHADA', 'ARQUIVADA'];              // status do projeto de HORAS considerados fechados
 
 // Ações da Coordenação/Gerência sobre o projeto de horas
@@ -33,7 +32,6 @@ const ACOES_PROJ = {
 
 let userData = null;
 let allTrips = [];
-let despesasList = [];     // status das viagens de despesas (informativo + evitar duplicidade)
 let colegas = [];
 let sharedList = [];
 let currentProject = { sigla: '', tipo: '' };
@@ -43,13 +41,14 @@ let sessionInterval = null;
 let pollTimer = null, polling = false, pollPromise = null;
 let jaCarregou = false, lastSig = '', lastSharedSig = '', busy = 0;
 let colegasPromise = null;
-let tecnicosSel = new Set();
 
 const $ = (id) => document.getElementById(id);
 function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 const RX_GESTAO = /Coordena|Ger[eê]ncia/i;
+const RX_MONITOR = /Monitor/i;
 function isGestao() { return !!userData && RX_GESTAO.test(userData.nivel || ''); }
-function isTecnico(u) { return !RX_GESTAO.test(u.nivel || ''); }
+function isMonitor(u) { return !!u && RX_MONITOR.test(u.nivel || ''); }
+function isTecnico(u) { return !RX_GESTAO.test(u.nivel || '') && !RX_MONITOR.test(u.nivel || ''); }
 function low(s) { return String(s == null ? '' : s).toLowerCase(); }
 function dataSo(t) { const d = String(t.data || ''); return d.includes('T') ? d.split('T')[0] : d; }
 
@@ -57,7 +56,6 @@ function dataSo(t) { const d = String(t.data || ''); return d.includes('T') ? d.
 // No banco, o domingo fica guardado com as horas já dobradas e o feriado com as horas reais.
 // Por isso "minsFeitos" devolve SEMPRE a hora extra literal (a que o técnico realmente fez),
 // e "minsReceber" aplica a regra de 8h x 2 = 16h para domingo/feriado.
-// Como tudo é calculado na hora de exibir, os registros antigos também seguem a nova regra.
 function diaSemanaTrip(t) { return new Date(dataSo(t) + 'T00:00:00').getDay(); }
 function ehDomingoSemFeriado(t) { return !t.feriado && diaSemanaTrip(t) === 0; }
 function diaEspecial(t) { return !!t.feriado || diaSemanaTrip(t) === 0; }
@@ -73,7 +71,7 @@ function minsReceber(t) {
 function valorReceber(t) { return (minsReceber(t) / 60) * (Number(t.valorHoraExtra) || 0); }
 function fmtMoeda(v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
 
-// ===== LOGIN ÚNICO ENTRE SISTEMAS (recebe a sessão vinda do despesas-gs) =====
+// ===== LOGIN ÚNICO ENTRE SISTEMAS (recebe a sessão vinda do dashboard) =====
 (function consumirSSO() {
     const m = location.hash.match(/^#sso=(.+)$/);
     if (!m) return;
@@ -88,11 +86,11 @@ function fmtMoeda(v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
     history.replaceState(null, '', location.pathname + location.search);
 })();
 
-function irParaDespesas() {
+function irParaDashboard() {
     if (!userData) return;
     const pacote = { u: userData, t: localStorage.getItem('loginTimestamp') || Date.now().toString() };
     const payload = btoa(unescape(encodeURIComponent(JSON.stringify(pacote))));
-    window.location.href = DESPESAS_URL + '#sso=' + payload;
+    window.location.href = DASHBOARD_URL + '#sso=' + payload;
 }
 
 // ===== GERENCIAMENTO DE SESSÃO =====
@@ -113,7 +111,7 @@ function logout(forcarReload = false) {
     if (userData) { try { localStorage.removeItem('tripsCache_' + userData.login); } catch (e) {} }
     localStorage.removeItem('usuarioAtivo');
     localStorage.removeItem('loginTimestamp');
-    userData = null; allTrips = []; despesasList = []; colegas = []; colegasPromise = null; sharedList = [];
+    userData = null; allTrips = []; colegas = []; colegasPromise = null; sharedList = [];
     jaCarregou = false; lastSig = ''; lastSharedSig = '';
     currentProject = { sigla: '', tipo: '' };
     if (sessionInterval) clearInterval(sessionInterval);
@@ -173,6 +171,8 @@ window.onload = () => {
     const loginTime = localStorage.getItem('loginTimestamp');
     if (savedUser && loginTime && (Date.now() - parseInt(loginTime) < TEMPO_SESSAO_MS)) {
         userData = JSON.parse(savedUser);
+        // Perfil Monitor (TVs) só usa o Dashboard
+        if (isMonitor(userData)) { irParaDashboard(); return; }
         $('globalHeader').classList.remove('hidden');
         showView('projectsView');
         initApp();
@@ -242,6 +242,7 @@ $('loginForm').addEventListener('submit', async (e) => {
         localStorage.setItem('usuarioAtivo', JSON.stringify(r.user));
         localStorage.setItem('loginTimestamp', Date.now().toString());
         userData = r.user;
+        if (isMonitor(userData)) { irParaDashboard(); return; }
         showToast('Bem-vindo ao portal!', 'success', 'Login Realizado');
         $('globalHeader').classList.remove('hidden'); showView('projectsView'); initApp(); iniciarMonitoramentoSessao();
         $('loginForm').reset(); $('loginMsg').classList.add('hidden');
@@ -369,11 +370,11 @@ async function redefinirSenha() {
 function aplicarPerfil() {
     const g = isGestao();
     $('btnNovoProjeto').classList.toggle('hidden', g);
-    $('btnCriarViagemGestao').classList.toggle('hidden', !g);
+    $('btnIrDashboard').classList.toggle('hidden', !g);
     $('blocoCompartilhados').classList.toggle('hidden', g);
     $('projetosTitulo').textContent = g ? 'Viagens em Andamento' : 'Meus Projetos Ativos';
     $('projetosSubtitulo').textContent = g
-        ? 'Acompanhe ao vivo os apontamentos de horas dos técnicos, feche/reabra projetos ou crie uma nova viagem.'
+        ? 'Acompanhe ao vivo os apontamentos de horas dos técnicos, feche/reabra projetos. Novas viagens são criadas pelo Dashboard.'
         : 'Selecione uma loja para gerenciar apontamentos ou inicie um novo projeto.';
 }
 
@@ -494,13 +495,11 @@ async function atualizarDados() {
 
 async function executarAtualizacao() {
     try {
-        const [trips, shared, desp] = await Promise.all([
+        const [trips, shared] = await Promise.all([
             buscarTrips(),
-            isGestao() ? Promise.resolve(null) : postAPI({ action: 'getSharedTrips', login: userData.login }),
-            postAPI({ action: 'getDespesasViagens', login: userData.login, nivel: userData.nivel })
+            isGestao() ? Promise.resolve(null) : postAPI({ action: 'getSharedTrips', login: userData.login })
         ]);
         if (!userData) return;
-        if (desp && desp.success) despesasList = (desp.viagens || []).map(v => ({ sigla: v.sigla, colaborador: v.colaborador, status: v.status, motivo: v.motivo }));
         if (trips) aplicarTrips(trips);
         else if (!jaCarregou && allTrips.length === 0) $('level1Projects').innerHTML = '<div class="col-span-full text-center text-amber-600 py-10"><i class="fa-solid fa-wifi mr-1"></i> Não foi possível carregar. Tentando novamente...</div>';
         if (shared && shared.success) renderCompartilhados(shared.shared || []);
@@ -510,10 +509,9 @@ async function executarAtualizacao() {
 function aplicarTrips(trips) {
     if (busy > 0) return;
     const tripsSig = JSON.stringify(trips);
-    const sig = tripsSig + '#' + JSON.stringify(despesasList);
-    if (sig === lastSig && jaCarregou) return;
+    if (tripsSig === lastSig && jaCarregou) return;
     const antes = allTrips.filter(t => !t.isInit).length;
-    lastSig = sig;
+    lastSig = tripsSig;
     allTrips = trips;
     try { localStorage.setItem('tripsCache_' + userData.login, tripsSig); } catch (e) {}
     const depois = trips.filter(t => !t.isInit).length;
@@ -557,7 +555,7 @@ function renderizarLojas() {
 
     const doTab = abaProjetos === 'ARQUIVADOS' ? arqs : ativos;
     if (doTab.length === 0) {
-        const msgVazio = abaProjetos === 'ARQUIVADOS' ? 'Nenhum projeto fechado ou arquivado.<br>Projetos fechados pela coordenação aparecem aqui.' : ('Nenhum projeto ativo.<br>' + (isGestao() ? 'Clique em "Criar Viagem" para começar.' : 'Clique em "Novo Projeto" para começar.'));
+        const msgVazio = abaProjetos === 'ARQUIVADOS' ? 'Nenhum projeto fechado ou arquivado.<br>Projetos fechados pela coordenação aparecem aqui.' : ('Nenhum projeto ativo.<br>' + (isGestao() ? 'Crie viagens pelo Dashboard.' : 'Clique em "Novo Projeto" para começar.'));
         grid1.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10 bg-white rounded border border-dashed border-slate-300"><i class="fa-solid ${abaProjetos === 'ARQUIVADOS' ? 'fa-box-archive' : 'fa-folder-open'} text-4xl mb-3"></i><br>${msgVazio}</div>`;
         return;
     }
@@ -629,90 +627,6 @@ async function criarProjeto() {
     showToast(`Projeto ${sigla} - ${tipo} criado com sucesso!`, 'success', 'Novo Projeto');
     abaProjetos = projetoArquivado(sigla, tipo) ? 'ARQUIVADOS' : 'ATIVOS';
     abrirWorkspace(sigla, tipo);
-}
-
-// ===== CRIAR VIAGEM (Coordenação / Gerência) - vários técnicos, um único ticket =====
-function checkOutrosViagem() { const v = $('novaViagemTipo').value; if (v === 'Outros') $('novaViagemOutros').classList.remove('hidden'); else { $('novaViagemOutros').classList.add('hidden'); $('novaViagemOutros').value = ''; } }
-
-async function abrirModalViagem() {
-    $('novaViagemSigla').value = ''; $('novaViagemMotivo').value = ''; $('novaViagemOutros').value = ''; $('buscaTecnico').value = '';
-    $('novaViagemTipo').value = 'Inauguração'; checkOutrosViagem();
-    tecnicosSel = new Set();
-    $('modalViagem').classList.remove('hidden');
-    $('listaTecnicos').innerHTML = '<p class="text-xs text-slate-400 text-center py-3"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Carregando técnicos...</p>';
-    await carregarColegas();
-    renderListaTecnicos();
-}
-function fecharModalViagem() { $('modalViagem').classList.add('hidden'); }
-
-function atualizarContTecnicos() { $('contTecnicos').textContent = `(${tecnicosSel.size} selecionado${tecnicosSel.size === 1 ? '' : 's'})`; }
-
-function listaTecnicosVisiveis() {
-    const q = ($('buscaTecnico').value || '').trim().toLowerCase();
-    return colegas.filter(isTecnico).filter(u => (String(u.nome || '') + ' ' + String(u.login || '')).toLowerCase().includes(q));
-}
-
-function renderListaTecnicos() {
-    const box = $('listaTecnicos'); box.innerHTML = '';
-    const lista = listaTecnicosVisiveis();
-    if (!lista.length) { box.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">Nenhum técnico encontrado.</p>'; atualizarContTecnicos(); return; }
-    lista.forEach(u => {
-        const lb = document.createElement('label');
-        lb.className = 'flex items-center gap-2 px-3 py-2 border-b text-sm cursor-pointer hover:bg-slate-50';
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'h-4 w-4 accent-emerald-600'; cb.checked = tecnicosSel.has(u.login);
-        cb.onchange = () => { if (cb.checked) tecnicosSel.add(u.login); else tecnicosSel.delete(u.login); atualizarContTecnicos(); };
-        const sp = document.createElement('span'); sp.innerHTML = `<b>${esc(u.nome)}</b> <span class="text-[11px] text-slate-400 font-mono">${esc(u.login)}</span>`;
-        lb.appendChild(cb); lb.appendChild(sp); box.appendChild(lb);
-    });
-    atualizarContTecnicos();
-}
-
-function selecionarTodosTecnicos() {
-    const vis = listaTecnicosVisiveis();
-    const todos = vis.length && vis.every(u => tecnicosSel.has(u.login));
-    vis.forEach(u => { if (todos) tecnicosSel.delete(u.login); else tecnicosSel.add(u.login); });
-    renderListaTecnicos();
-}
-
-async function confirmarCriarViagemGestao() {
-    const sigla = $('novaViagemSigla').value.trim().toUpperCase();
-    let tipo = $('novaViagemTipo').value;
-    if (tipo === 'Outros') tipo = $('novaViagemOutros').value.trim();
-    const motivo = $('novaViagemMotivo').value.trim() || tipo;
-    let logins = Array.from(tecnicosSel);
-    if (!sigla || !tipo) { showToast('Informe a sigla e a categoria.', 'warning', 'Campo Obrigatório'); return; }
-    if (!logins.length) { showToast('Selecione ao menos um técnico.', 'warning', 'Campo Obrigatório'); return; }
-
-    // evita duplicar quem já tem despesa ativa na mesma loja + motivo
-    const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
-    const jaExistem = despesasList.filter(d => String(d.sigla).toUpperCase() === sigla && norm(d.motivo) === norm(motivo) && !ST_ARQ.includes(d.status)).map(d => low(d.colaborador));
-    const duplicados = logins.filter(l => jaExistem.includes(low(l)));
-    if (duplicados.length) {
-        showToast(`Já estão nesta viagem: ${duplicados.map(esc).join(', ')}.`, 'warning', 'Ignorados', 6000);
-        logins = logins.filter(l => !duplicados.includes(l));
-        if (!logins.length) return;
-    }
-
-    const idGrupo = 'G' + Date.now();
-    const btn = $('btnCriarViagem'); const original = btn.innerHTML; btn.disabled = true;
-    busy++;
-    const falhas = [];
-    try {
-        // Sequencial de propósito: evita gravações simultâneas na planilha (ids duplicados)
-        for (let i = 0; i < logins.length; i++) {
-            btn.innerHTML = `<span class="loader-small"></span> ${i + 1}/${logins.length}`;
-            const login = logins[i];
-            const a = await postAPI({ action: 'initProject', login, sigla, tipoProjeto: tipo });
-            const b = await postAPI({ action: 'createDespesaViagem', sigla, motivo, colaborador: login, criadoPor: userData.login, nivel: userData.nivel, idGrupo });
-            if (!(a && a.success) || !(b && b.success)) falhas.push(login);
-        }
-    } finally { busy--; btn.disabled = false; btn.innerHTML = original; }
-    fecharModalViagem();
-    if (falhas.length) showToast(`Falha ao criar para: ${falhas.map(esc).join(', ')}`, 'error', 'Atenção', 7000);
-    const ok = logins.length - falhas.length;
-    if (ok > 0) showToast(`Viagem ${sigla} criada com ${ok} técnico(s): projeto de horas e despesas abertos.`, 'success', 'Viagem Criada');
-    abaProjetos = 'ATIVOS';
-    atualizarDados();
 }
 
 // ===== WORKSPACE =====
@@ -970,12 +884,6 @@ function badgeHoras(st) {
     }[st] || ['Aberto', 'bg-blue-100 text-blue-700 border-blue-200', 'fa-folder-open'];
     return `<span class="${m[1]} text-[10px] font-bold px-2 py-0.5 rounded border uppercase"><i class="fa-solid ${m[2]} mr-1"></i>Horas: ${m[0]}</span>`;
 }
-function badgeDespesaTec(sigla, login) {
-    const S = String(sigla).toUpperCase(), L = low(login);
-    const ds = despesasList.filter(d => String(d.sigla).toUpperCase() === S && low(d.colaborador) === L);
-    if (!ds.length) return '<span class="text-[10px] font-bold text-slate-400 uppercase border border-dashed rounded px-2 py-0.5">Sem despesa</span>';
-    return `<span class="bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded uppercase"><i class="fa-solid fa-receipt mr-1"></i>Despesa: ${ds.map(d => esc(d.status)).join(', ')}</span>`;
-}
 function btnAcaoHtml(acao, logins, extra) {
     const c = ACOES_PROJ[acao];
     return `<button onclick="acaoProjetoGestao('${acao}','${esc(logins.join(','))}')" class="${c.cls} text-white text-[11px] font-bold py-1.5 px-3 rounded shadow transition whitespace-nowrap"><i class="fa-solid ${c.icon} mr-1"></i>${c.txt}${extra || ''}</button>`;
@@ -1098,7 +1006,7 @@ function renderizarWorkspaceGestao() {
               <div><p class="text-[10px] uppercase font-bold text-slate-400">Extras feitas</p><p class="text-xl font-black text-blue-600 font-mono leading-none">${minsToTime(r.total)}</p></div>
               <div><p class="text-[10px] uppercase font-bold text-slate-400">A receber</p><p class="text-xl font-black text-emerald-600 font-mono leading-none">${minsToTime(r.rec)}</p></div>
             </div>
-            <div class="w-full flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">${badgeHoras(tec.status)}${badgeDespesaTec(currentProject.sigla, tec.login)}<div class="flex flex-wrap gap-2 ml-auto">${botoesPorStatus(tec.status, [tec.login])}</div></div>
+            <div class="w-full flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200">${badgeHoras(tec.status)}<div class="flex flex-wrap gap-2 ml-auto">${botoesPorStatus(tec.status, [tec.login])}</div></div>
           </div>
           <div class="overflow-auto custom-scrollbar max-h-72"><table class="min-w-full text-sm text-left"><thead class="bg-white sticky top-0 border-b"><tr><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Data</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px] text-center">Entrada / Pausa / Saída</th><th class="px-4 py-2 font-bold text-slate-500 uppercase text-[10px]">Escala</th><th class="px-4 py-2 font-bold text-blue-600 uppercase text-[10px] text-center">Extra Feita</th><th class="px-4 py-2 font-bold text-emerald-600 uppercase text-[10px] text-center">Extra a Receber</th></tr></thead><tbody class="divide-y divide-slate-100">${linhas}</tbody></table></div>
         </div>`;
