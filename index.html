@@ -203,11 +203,9 @@
         <div class="flex justify-between items-center mb-8 border-b border-slate-300 pb-4 gap-3 flex-wrap">
             <div>
                 <h2 class="text-2xl font-bold text-slate-800"><i class="fa-solid fa-folder-tree text-blue-600 mr-2"></i> <span id="projetosTitulo">Meus Projetos Ativos</span></h2>
-                <p class="text-sm text-slate-500 mt-1" id="projetosSubtitulo">Selecione uma loja para gerenciar apontamentos ou inicie um novo projeto.</p>
+                <p class="text-sm text-slate-500 mt-1" id="projetosSubtitulo">Selecione a filial e depois o posto da sua viagem para lançar as horas.</p>
             </div>
-            <button id="btnNovoProjeto" onclick="abrirModalProjeto()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow-lg transition">
-                <i class="fa-solid fa-plus mr-2"></i> Novo Projeto
-            </button>
+            
             <button id="btnIrDashboard" onclick="irParaDashboard()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded shadow-lg transition">
                 <i class="fa-solid fa-route mr-2"></i> Criar Viagem (Dashboard)
             </button>
@@ -252,6 +250,7 @@
                     </div>
                     <form id="tripForm" class="p-5 space-y-4">
                         <input type="hidden" id="editTripId" value="">
+                        <div id="infoPeriodo" class="hidden text-[12px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"></div>
                         <input type="date" id="dataTrabalho" required class="w-full px-3 py-2 text-sm border rounded bg-slate-50 border-slate-300">
                         <label class="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 cursor-pointer select-none">
                             <input type="checkbox" id="chkFeriado" class="mt-0.5 h-4 w-4 accent-amber-500">
@@ -342,35 +341,6 @@
     </div>
 
     <!-- MODAIS -->
-    <div id="modalProjeto" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center fade-in">
-        <div class="bg-white p-6 rounded-xl shadow-xl w-96 border-t-4 border-blue-600">
-            <h3 class="text-lg font-bold text-slate-800 mb-4"><i class="fa-solid fa-folder-plus text-blue-500 mr-2"></i> Iniciar Novo Projeto</h3>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-1">SIGLA DA LOJA</label>
-                    <input type="text" id="novoProjSigla" required maxlength="3" placeholder="Ex: PIN" class="w-full px-3 py-2 text-sm border rounded uppercase bg-slate-50 focus:ring-1 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-1">CATEGORIA DO SERVIÇO</label>
-                    <select id="novoProjTipo" onchange="checkOutros()" class="w-full px-3 py-2 text-sm border rounded bg-slate-50 mb-2">
-                        <option value="Inauguração">Inauguração</option>
-                        <option value="Reinauguração">Reinauguração</option>
-                        <option value="Mudança de status">Mudança de status</option>
-                        <option value="Pc-á-pc">Pc-á-pc</option>
-                        <option value="Impressoras">Impressoras</option>
-                        <option value="Networking">Networking</option>
-                        <option value="Outros">Outros...</option>
-                    </select>
-                    <input type="text" id="novoProjOutros" placeholder="Especifique a categoria..." class="hidden w-full px-3 py-2 text-sm border rounded bg-white">
-                </div>
-            </div>
-            <div class="flex justify-end gap-2 mt-6">
-                <button onclick="fecharModalProjeto()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
-                <button onclick="criarProjeto()" class="px-4 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded shadow">Continuar</button>
-            </div>
-        </div>
-    </div>
-
     <div id="modalShare" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center fade-in">
         <div class="bg-white p-6 rounded-xl shadow-xl w-96 border-t-4 border-blue-600">
             <h3 class="text-lg font-bold text-slate-800 mb-4"><i class="fa-solid fa-share-nodes text-blue-500 mr-2"></i> Compartilhar Projeto</h3>
