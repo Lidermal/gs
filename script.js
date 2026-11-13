@@ -52,6 +52,38 @@ function isTecnico(u) { return !RX_GESTAO.test(u.nivel || '') && !RX_MONITOR.tes
 function low(s) { return String(s == null ? '' : s).toLowerCase(); }
 function dataSo(t) { const d = String(t.data || ''); return d.includes('T') ? d.split('T')[0] : d; }
 
+// ===== PROJETO = FILIAL (pasta) > POSTO (subpasta) =====
+// No banco o projeto fica como SIGLA = filial e TIPO = "POSTO||Tipo do evento". Projetos antigos (sem "||") seguem normais.
+const SEP_PROJ = '||';
+function postoDe(tipo) { const s = String(tipo || ''); const i = s.indexOf(SEP_PROJ); return i >= 0 ? s.slice(0, i) : ''; }
+function tipoDe(tipo) { const s = String(tipo || ''); const i = s.indexOf(SEP_PROJ); return i >= 0 ? s.slice(i + SEP_PROJ.length) : s; }
+function nomePasta(tipo) { return postoDe(tipo) || tipoDe(tipo); }
+function nomeProj(sigla, tipo) { const p = postoDe(tipo); return p ? `${sigla} › ${p} (${tipoDe(tipo)})` : `${sigla} - ${tipo}`; }
+function fmtDataBR(iso) { return iso ? String(iso).split('-').reverse().join('/') : ''; }
+function periodoTxt(per) { return per.ini === per.fim ? fmtDataBR(per.ini) : `${fmtDataBR(per.ini)} a ${fmtDataBR(per.fim)}`; }
+// Período liberado pela Coordenação/Gerência (saída -> data do evento), vindo do servidor
+function periodoDoProjeto(sigla, tipo) {
+    const t = allTrips.find(x => x.sigla === sigla && x.tipo === tipo && x.periodos && x.periodos.length);
+    if (!t) return null;
+    return { lista: t.periodos, ini: t.periodos.map(p => p[0]).sort()[0], fim: t.periodos.map(p => p[1]).sort().slice(-1)[0] };
+}
+function dataLiberada(sigla, tipo, d) { const p = periodoDoProjeto(sigla, tipo); return !p || p.lista.some(x => d >= x[0] && d <= x[1]); }
+function abrirWorkspaceEnc(sigla, enc) { abrirWorkspace(sigla, decodeURIComponent(enc)); }
+function atualizarCabecalhoWorkspace() {
+    const { sigla, tipo } = currentProject; if (!sigla || !tipo) return;
+    const posto = postoDe(tipo), per = periodoDoProjeto(sigla, tipo);
+    $('workspaceTitle').textContent = posto ? `FILIAL ${sigla} › ${posto}` : `PROJETO: ${sigla}`;
+    $('workspaceSubtitle').textContent = `Categoria: ${tipoDe(tipo)}` + (per ? ` • Período liberado: ${periodoTxt(per)}` : '');
+}
+function aplicarPeriodoForm() {
+    const per = periodoDoProjeto(currentProject.sigla, currentProject.tipo);
+    const inp = $('dataTrabalho'), info = $('infoPeriodo');
+    if (per) {
+        inp.min = per.ini; inp.max = per.fim;
+        if (info) { info.classList.remove('hidden'); info.innerHTML = `<i class="fa-regular fa-calendar mr-1"></i> Lançamentos liberados de <b>${fmtDataBR(per.ini)}</b> a <b>${fmtDataBR(per.fim)}</b> (definido pela Coordenação/Gerência).`; }
+    } else { inp.removeAttribute('min'); inp.removeAttribute('max'); if (info) info.classList.add('hidden'); }
+}
+
 // ===== HORAS EXTRAS: FEITAS x A RECEBER =====
 // No banco, o domingo fica guardado com as horas já dobradas e o feriado com as horas reais.
 // Por isso "minsFeitos" devolve SEMPRE a hora extra literal (a que o técnico realmente fez),
@@ -369,13 +401,12 @@ async function redefinirSenha() {
 // ===== PERFIL DE ACESSO =====
 function aplicarPerfil() {
     const g = isGestao();
-    $('btnNovoProjeto').classList.toggle('hidden', g);
     $('btnIrDashboard').classList.toggle('hidden', !g);
     $('blocoCompartilhados').classList.toggle('hidden', g);
     $('projetosTitulo').textContent = g ? 'Viagens em Andamento' : 'Meus Projetos Ativos';
     $('projetosSubtitulo').textContent = g
         ? 'Acompanhe ao vivo os apontamentos de horas dos técnicos, feche/reabra projetos. Novas viagens são criadas pelo Dashboard.'
-        : 'Selecione uma loja para gerenciar apontamentos ou inicie um novo projeto.';
+        : 'Selecione a filial e depois o posto da sua viagem para lançar as horas.';
 }
 
 // ===== ABAS: ATIVOS x FECHADOS/ARQUIVADOS =====
@@ -536,7 +567,7 @@ function renderCompartilhados(lista) {
     const el = $('listaCompartilhados'); el.innerHTML = '';
     if (!lista.length) { el.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto recebido.</p>'; return; }
     lista.forEach((s, i) => {
-        el.innerHTML += `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2 flex justify-between items-center hover:bg-white hover:border-blue-300 transition group shadow-sm"><div><p class="text-xs font-bold text-slate-800 uppercase">${esc(s.sigla)} - ${esc(s.tipoProjeto)}</p><p class="text-[10px] text-slate-500 mt-1">Enviado por: <b>${esc(s.remetente)}</b> (${s.trips.length} reg.)</p></div><button onclick="usarSharedProject(${i})" class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition">Aproveitar Projeto</button></div>`;
+        el.innerHTML += `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2 flex justify-between items-center hover:bg-white hover:border-blue-300 transition group shadow-sm"><div><p class="text-xs font-bold text-slate-800 uppercase">${esc(nomeProj(s.sigla, s.tipoProjeto))}</p><p class="text-[10px] text-slate-500 mt-1">Enviado por: <b>${esc(s.remetente)}</b> (${s.trips.length} reg.)</p></div><button onclick="usarSharedProject(${i})" class="bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition">Aproveitar Projeto</button></div>`;
     });
 }
 
@@ -555,7 +586,7 @@ function renderizarLojas() {
 
     const doTab = abaProjetos === 'ARQUIVADOS' ? arqs : ativos;
     if (doTab.length === 0) {
-        const msgVazio = abaProjetos === 'ARQUIVADOS' ? 'Nenhum projeto fechado ou arquivado.<br>Projetos fechados pela coordenação aparecem aqui.' : ('Nenhum projeto ativo.<br>' + (isGestao() ? 'Crie viagens pelo Dashboard.' : 'Clique em "Novo Projeto" para começar.'));
+        const msgVazio = abaProjetos === 'ARQUIVADOS' ? 'Nenhum projeto fechado ou arquivado.<br>Projetos fechados pela coordenação aparecem aqui.' : ('Nenhum projeto ativo.<br>' + (isGestao() ? 'Crie viagens pelo Dashboard.' : 'Aguarde a coordenação criar a sua viagem pelo Dashboard.'));
         grid1.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10 bg-white rounded border border-dashed border-slate-300"><i class="fa-solid ${abaProjetos === 'ARQUIVADOS' ? 'fa-box-archive' : 'fa-folder-open'} text-4xl mb-3"></i><br>${msgVazio}</div>`;
         return;
     }
@@ -573,7 +604,7 @@ function renderizarLojas() {
     Object.keys(lojas).sort().forEach(sigla => {
         const L = lojas[sigla];
         const tecs = isGestao() ? `<p class="text-[11px] text-slate-500 mt-2 line-clamp-2"><i class="fa-solid fa-users mr-1 text-slate-400"></i>${Array.from(L.tecs).map(esc).join(', ')}</p>` : '';
-        html += `<div onclick="abrirLoja('${sigla}')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-start mb-2"><div class="${arq ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-600'} w-12 h-12 rounded-lg flex items-center justify-center font-bold text-xl group-hover:bg-blue-600 group-hover:text-white transition shadow-sm"><i class="fa-solid ${arq ? 'fa-box-archive' : 'fa-store'}"></i></div><span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded border">${L.regs} reg.</span></div><h3 class="text-2xl font-black text-slate-800 uppercase tracking-tight mt-2">${esc(sigla)}</h3><p class="text-[11px] text-slate-400 font-semibold">${L.cats.size} categoria(s)</p>${tecs}<p class="text-xs text-slate-500 font-medium mt-2">Acessar pastas da loja <i class="fa-solid fa-arrow-right ml-1"></i></p></div>`;
+        html += `<div onclick="abrirLoja('${sigla}')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-start mb-2"><div class="${arq ? 'bg-slate-100 text-slate-500' : 'bg-blue-50 text-blue-600'} w-12 h-12 rounded-lg flex items-center justify-center font-bold text-xl group-hover:bg-blue-600 group-hover:text-white transition shadow-sm"><i class="fa-solid ${arq ? 'fa-box-archive' : 'fa-store'}"></i></div><span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded border">${L.regs} reg.</span></div><h3 class="text-2xl font-black text-slate-800 uppercase tracking-tight mt-2">${esc(sigla)}</h3><p class="text-[11px] text-slate-400 font-semibold">${L.cats.size} posto(s)</p>${tecs}<p class="text-xs text-slate-500 font-medium mt-2">Acessar postos da filial <i class="fa-solid fa-arrow-right ml-1"></i></p></div>`;
     });
     grid1.innerHTML = html;
 }
@@ -600,7 +631,10 @@ function abrirLoja(sigla) {
         const tripsReais = allTrips.filter(t => t.sigla === sigla && t.tipo === tipo && !t.isInit).length;
         const labelReg = tripsReais > 0 ? `${tripsReais} reg.` : 'Novo';
         const tecs = isGestao() ? `<p class="text-[11px] text-slate-500 mt-2 line-clamp-2"><i class="fa-solid fa-users mr-1 text-slate-400"></i>${Array.from(categorias[tipo]).map(esc).join(', ')}</p>` : '';
-        html += `<div onclick="abrirWorkspace('${sigla}', '${tipo}')" class="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-center mb-3"><div class="${arq ? 'text-slate-400' : 'text-blue-500'} group-hover:text-blue-700 transition"><i class="fa-solid ${arq ? 'fa-box-archive' : 'fa-folder-open'} text-2xl"></i></div><span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${labelReg}</span></div><h4 class="text-sm font-bold text-slate-800 truncate" title="${esc(tipo)}">${esc(tipo)}</h4>${tecs}<p class="text-[10px] text-slate-400 mt-2 uppercase">${isGestao() ? 'Acompanhar / gerenciar' : (arq ? 'Ver (somente leitura)' : 'Entrar no Workspace')}</p></div>`;
+        const per = periodoDoProjeto(sigla, tipo);
+        const perTxt = per ? `<p class="text-[11px] text-emerald-700 font-semibold mt-2"><i class="fa-regular fa-calendar mr-1"></i>${periodoTxt(per)}</p>` : '';
+        const catTxt = postoDe(tipo) ? `<p class="text-[11px] text-slate-500 font-semibold mt-1">${esc(tipoDe(tipo))}</p>` : '';
+        html += `<div onclick="abrirWorkspaceEnc('${esc(sigla)}', '${encodeURIComponent(tipo)}')" class="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition group"><div class="flex justify-between items-center mb-3"><div class="${arq ? 'text-slate-400' : 'text-blue-500'} group-hover:text-blue-700 transition"><i class="fa-solid ${arq ? 'fa-box-archive' : 'fa-folder-open'} text-2xl"></i></div><span class="bg-white text-slate-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm">${labelReg}</span></div><h4 class="text-base font-black text-slate-800 truncate uppercase" title="${esc(nomePasta(tipo))}">${esc(nomePasta(tipo))}</h4>${catTxt}${perTxt}${tecs}<p class="text-[10px] text-slate-400 mt-2 uppercase">${isGestao() ? 'Acompanhar / gerenciar' : (arq ? 'Ver (somente leitura)' : 'Entrar no Workspace')}</p></div>`;
     });
     grid2.innerHTML = html;
 }
@@ -608,33 +642,11 @@ function abrirLoja(sigla) {
 function voltarParaLojas() { currentProject = { sigla: '', tipo: '' }; $('level2Projects').classList.add('hidden'); $('level1Projects').classList.remove('hidden'); showView('projectsView'); }
 function voltarParaCategorias() { showView('projectsView'); abrirLoja(currentProject.sigla); }
 
-function checkOutros() { const v = $('novoProjTipo').value; if(v === 'Outros') $('novoProjOutros').classList.remove('hidden'); else { $('novoProjOutros').classList.add('hidden'); $('novoProjOutros').value = ''; } }
-function abrirModalProjeto() { $('modalProjeto').classList.remove('hidden'); }
-function fecharModalProjeto() { $('modalProjeto').classList.add('hidden'); }
-
-async function criarProjeto() {
-    const sigla = $('novoProjSigla').value.trim().toUpperCase();
-    let tipo = $('novoProjTipo').value;
-    if (tipo === 'Outros') tipo = $('novoProjOutros').value.trim();
-    if(!sigla) { showToast('Informe a sigla da loja!', 'warning', 'Campo Obrigatório'); return; }
-    if(!tipo) { showToast('Informe a categoria do serviço!', 'warning', 'Campo Obrigatório'); return; }
-    fecharModalProjeto();
-    busy++;
-    try {
-        await fetchAPI({ action: 'initProject', login: userData.login, sigla: sigla, tipoProjeto: tipo }, null, null, null, null);
-    } finally { busy--; }
-    await atualizarDados();
-    showToast(`Projeto ${sigla} - ${tipo} criado com sucesso!`, 'success', 'Novo Projeto');
-    abaProjetos = projetoArquivado(sigla, tipo) ? 'ARQUIVADOS' : 'ATIVOS';
-    abrirWorkspace(sigla, tipo);
-}
-
 // ===== WORKSPACE =====
 function abrirWorkspace(sigla, tipo) {
     currentProject = { sigla: sigla, tipo: tipo };
     filtroTecnico = 'TODOS';
-    $('workspaceTitle').textContent = `PROJETO: ${sigla}`;
-    $('workspaceSubtitle').textContent = `Categoria: ${tipo}`;
+    atualizarCabecalhoWorkspace();
     const g = isGestao();
     ['btnShare', 'btnDelProj'].forEach(id => $(id).classList.toggle('hidden', g));
     $('btnPDF').classList.remove('hidden');
@@ -734,6 +746,7 @@ function carregarParaEdicao(idTrip) {
 $('tripForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (projetoFechadoSuporte()) { showToast('Projeto fechado pela Coordenação/Gerência. Não é possível alterar.', 'warning', 'Bloqueado'); return; }
+    if (!dataLiberada(currentProject.sigla, currentProject.tipo, $('dataTrabalho').value)) { const per = periodoDoProjeto(currentProject.sigla, currentProject.tipo); showToast(`Só é possível lançar horas entre ${periodoTxt(per)}, período definido pela Coordenação/Gerência.`, 'warning', 'Fora do período'); return; }
     const isEdit = $('editTripId').value !== '';
     const btnId = 'btnSalvar'; const msgId = 'msgSalvar';
     const originalText = isEdit ? '<i class="fa-solid fa-pen mr-2"></i> Atualizar Lançamento' : '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Gravar Lançamento';
@@ -781,7 +794,7 @@ async function deletarRegistro(idViagem) {
 
 async function deletarProjeto() {
     if (projetoFechadoSuporte()) { showToast('Projeto fechado pela Coordenação/Gerência.', 'warning', 'Bloqueado'); return; }
-    const confirmed = await showConfirm(`Excluir o projeto ${currentProject.sigla} e TODOS os lançamentos dele?<br><br><strong>Esta ação não pode ser desfeita.</strong>`, { title: 'Excluir Projeto Completo', confirmText: 'Sim, Excluir Tudo', type: 'danger', icon: 'fa-trash-can' });
+    const confirmed = await showConfirm(`Excluir o projeto ${esc(nomeProj(currentProject.sigla, currentProject.tipo))} e TODOS os lançamentos dele?<br><br><strong>Esta ação não pode ser desfeita.</strong>`, { title: 'Excluir Projeto Completo', confirmText: 'Sim, Excluir Tudo', type: 'danger', icon: 'fa-trash-can' });
     if(!confirmed) return;
     const { sigla, tipo } = currentProject;
     const backup = allTrips;
@@ -811,8 +824,10 @@ function garantirCabecalhoFinanceiro() {
 }
 
 function renderizarWorkspace() {
+    atualizarCabecalhoWorkspace();
     if (isGestao()) return renderizarWorkspaceGestao();
     aplicarTravaWorkspace();
+    aplicarPeriodoForm();
     garantirCabecalhoFinanceiro();
     const trava = projetoFechadoSuporte();
     const tbH = $('tbHoras'); const tbF = $('tbFinanceiro');
@@ -912,12 +927,12 @@ async function acaoProjetoGestao(acao, loginsCsv) {
     if (!excluir && !cfg) return;
 
     const msg = excluir
-        ? `Excluir o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> e TODOS os lançamentos de horas de: ${esc(nomes)}?<br><br><strong>Esta ação não pode ser desfeita.</strong>`
+        ? `Excluir o projeto <b>${esc(nomeProj(sigla, tipo))}</b> e TODOS os lançamentos de horas de: ${esc(nomes)}?<br><br><strong>Esta ação não pode ser desfeita.</strong>`
         : (acao === 'reabrir'
-            ? `Reabrir o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> de: ${esc(nomes)}?<br><br>O técnico voltará a poder lançar e editar horas.`
+            ? `Reabrir o projeto <b>${esc(nomeProj(sigla, tipo))}</b> de: ${esc(nomes)}?<br><br>O técnico voltará a poder lançar e editar horas.`
             : acao === 'desarquivar'
-                ? `Desarquivar o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> de: ${esc(nomes)}?<br><br>Ele volta para <b>Fechado</b> (você pode reabri-lo depois).`
-                : `${cfg.txt} o projeto <b>${esc(sigla)} - ${esc(tipo)}</b> de: ${esc(nomes)}?`);
+                ? `Desarquivar o projeto <b>${esc(nomeProj(sigla, tipo))}</b> de: ${esc(nomes)}?<br><br>Ele volta para <b>Fechado</b> (você pode reabri-lo depois).`
+                : `${cfg.txt} o projeto <b>${esc(nomeProj(sigla, tipo))}</b> de: ${esc(nomes)}?`);
     const ok = await showConfirm(msg, {
         title: excluir ? 'Excluir Projeto' : `${cfg.txt} Projeto`,
         confirmText: excluir ? 'Sim, Excluir' : `Sim, ${cfg.txt}`,
@@ -1113,8 +1128,8 @@ async function gerarPDFGestao() {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(100, 116, 139); doc.text(rot.toUpperCase(), x, yy);
         doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(15, 23, 42); doc.text(String(val), x, yy + 5.5);
     };
-    campo('Loja (Sigla)', currentProject.sigla, 18, y + 7);
-    campo('Categoria do serviço', currentProject.tipo, 70, y + 7);
+    campo('Filial / Posto', postoDe(currentProject.tipo) ? currentProject.sigla + ' / ' + postoDe(currentProject.tipo) : currentProject.sigla, 18, y + 7);
+    campo('Categoria do serviço', tipoDe(currentProject.tipo), 70, y + 7);
     campo('Período', periodo, 130, y + 7);
     campo('Técnicos', `${alvo.length} ${alvo.length === 1 ? 'técnico' : 'técnicos'}`, 18, y + 19);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(100, 116, 139); doc.text('PARTICIPANTES', 70, y + 19);
@@ -1216,10 +1231,10 @@ async function gerarPDF() {
     const doc = new jsPDF();
 
     doc.setFontSize(16); doc.setTextColor(30, 41, 59);
-    doc.text(`Relatório de Viagens - ${currentProject.sigla}`, 14, 15);
+    doc.text(`Relatório de Viagens - ${currentProject.sigla}${postoDe(currentProject.tipo) ? ' / ' + postoDe(currentProject.tipo) : ''}`, 14, 15);
     doc.setFontSize(10); doc.setTextColor(71, 85, 105);
     doc.text(`Técnico(a): ${userData.nome} ${userData.sobrenome}`, 14, 22);
-    doc.text(`Serviço: ${currentProject.tipo} | Equipe: ${userData.equipe} | Nível: ${userData.nivel}`, 14, 28);
+    doc.text(`Serviço: ${tipoDe(currentProject.tipo)} | Equipe: ${userData.equipe} | Nível: ${userData.nivel}`, 14, 28);
 
     const projTrips = allTrips.filter(t => t.sigla === currentProject.sigla && t.tipo === currentProject.tipo && !t.isInit);
     projTrips.sort((a, b) => new Date(a.data) - new Date(b.data));
